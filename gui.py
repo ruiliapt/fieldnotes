@@ -123,6 +123,47 @@ class MainWindow(QMainWindow):
         self.example_id_input.setPlaceholderText("例：CJ001")
         input_layout.addRow("例句编号:", self.example_id_input)
         
+        # 对于语篇和对话，添加分组选择
+        if entry_type in ["discourse", "dialogue"]:
+            group_label = "所属语篇:" if entry_type == "discourse" else "所属对话:"
+            
+            # 分组选择区域（包含下拉框和新建按钮）
+            group_select_layout = QHBoxLayout()
+            
+            # 创建并存储分组选择下拉框（根据类型命名）
+            group_combo = QComboBox()
+            group_combo.setEditable(False)
+            group_combo.setMinimumWidth(200)
+            group_select_layout.addWidget(group_combo, 1)
+            
+            # 新建按钮
+            new_group_btn = QPushButton("新建")
+            new_group_btn.setMaximumWidth(60)
+            new_group_btn.clicked.connect(
+                lambda: self.create_new_group(entry_type)
+            )
+            group_select_layout.addWidget(new_group_btn)
+            
+            # 刷新按钮
+            refresh_group_btn = QPushButton("刷新")
+            refresh_group_btn.setMaximumWidth(60)
+            refresh_group_btn.clicked.connect(
+                lambda: self.refresh_group_list(entry_type)
+            )
+            group_select_layout.addWidget(refresh_group_btn)
+            
+            input_layout.addRow(group_label, group_select_layout)
+            
+            # 根据类型存储combo box的引用
+            if entry_type == "discourse":
+                self.discourse_group_combo = group_combo
+                # 初始加载语篇列表
+                self.refresh_group_list("discourse")
+            else:  # dialogue
+                self.dialogue_group_combo = group_combo
+                # 初始加载对话列表
+                self.refresh_group_list("dialogue")
+        
         # 原文
         self.source_text_input = QTextEdit()
         self.source_text_input.setMaximumHeight(60)
@@ -307,6 +348,114 @@ class MainWindow(QMainWindow):
             return current_widget.property("entry_type") or "sentence"
         return "sentence"
     
+    def refresh_group_list(self, entry_type):
+        """刷新语篇/对话列表
+        
+        Args:
+            entry_type: discourse 或 dialogue
+        """
+        # 获取对应的combo box
+        combo = None
+        if entry_type == "discourse":
+            combo = getattr(self, 'discourse_group_combo', None)
+        elif entry_type == "dialogue":
+            combo = getattr(self, 'dialogue_group_combo', None)
+        
+        if not combo:
+            return
+        
+        # 清空并重新加载
+        combo.clear()
+        combo.addItem("--- 请选择 ---", "")
+        
+        # 从数据库获取分组列表
+        groups = self.db.get_groups_by_type(entry_type)
+        
+        for group in groups:
+            display_text = f"{group['group_id']} - {group['group_name']} ({group['count']}句)"
+            combo.addItem(display_text, group['group_id'])
+    
+    def create_new_group(self, entry_type):
+        """创建新的语篇/对话分组
+        
+        Args:
+            entry_type: discourse 或 dialogue
+        """
+        from PyQt6.QtWidgets import QInputDialog
+        
+        type_label = "语篇" if entry_type == "discourse" else "对话"
+        
+        # 让用户输入分组名称
+        group_name, ok = QInputDialog.getText(
+            self,
+            f"新建{type_label}",
+            f"请输入{type_label}名称:",
+            QLineEdit.EchoMode.Normal,
+            ""
+        )
+        
+        if ok and group_name.strip():
+            group_name = group_name.strip()
+            
+            # 生成新的group_id
+            group_id = self.db.get_next_group_id(entry_type)
+            
+            QMessageBox.information(
+                self,
+                "成功",
+                f"已创建{type_label}: {group_id} - {group_name}\n\n"
+                f"现在可以在下拉框中选择该{type_label}，然后录入句子。"
+            )
+            
+            # 刷新列表并自动选中新创建的
+            self.refresh_group_list(entry_type)
+            
+            # 在combo box中选中新创建的分组
+            combo = None
+            if entry_type == "discourse":
+                combo = getattr(self, 'discourse_group_combo', None)
+            elif entry_type == "dialogue":
+                combo = getattr(self, 'dialogue_group_combo', None)
+            
+            if combo:
+                # 查找并选中新创建的group_id
+                for i in range(combo.count()):
+                    if combo.itemData(i) == group_id:
+                        combo.setCurrentIndex(i)
+                        break
+    
+    def get_selected_group_info(self, entry_type):
+        """获取当前选中的分组信息
+        
+        Args:
+            entry_type: discourse 或 dialogue
+            
+        Returns:
+            (group_id, group_name) 或 (None, None)
+        """
+        combo = None
+        if entry_type == "discourse":
+            combo = getattr(self, 'discourse_group_combo', None)
+        elif entry_type == "dialogue":
+            combo = getattr(self, 'dialogue_group_combo', None)
+        
+        if not combo or combo.currentIndex() <= 0:
+            return None, None
+        
+        group_id = combo.currentData()
+        if not group_id:
+            return None, None
+        
+        # 从显示文本中提取group_name
+        text = combo.currentText()
+        # 格式: "DSC001 - 民间故事 (3句)"
+        if " - " in text and " (" in text:
+            group_name = text.split(" - ")[1].split(" (")[0]
+        else:
+            group_name = text
+        
+        return group_id, group_name
+    
     def create_search_tab(self):
         """创建检索标签页"""
         widget = QWidget()
@@ -451,14 +600,36 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "输入错误", "原文和翻译不能为空！")
             return
         
+        entry_type = self.get_current_entry_type()
+        
+        # 对于语篇和对话，检查是否选择了分组
+        group_id = ""
+        group_name = ""
+        if entry_type in ["discourse", "dialogue"]:
+            group_id, group_name = self.get_selected_group_info(entry_type)
+            if not group_id:
+                type_label = "语篇" if entry_type == "discourse" else "对话"
+                QMessageBox.warning(
+                    self, 
+                    "输入错误", 
+                    f"请先选择或创建{type_label}！\n\n点击'新建'按钮可以创建新的{type_label}。"
+                )
+                return
+        
         try:
-            entry_type = self.get_current_entry_type()
-            self.db.insert_entry(example_id, source_text, gloss, translation, notes,
-                               source_text_cn, gloss_cn, translation_cn,
-                               entry_type=entry_type)
+            self.db.insert_entry(
+                example_id, source_text, gloss, translation, notes,
+                source_text_cn, gloss_cn, translation_cn,
+                entry_type=entry_type,
+                group_id=group_id,
+                group_name=group_name
+            )
             QMessageBox.information(self, "成功", "语料添加成功！")
             self.clear_inputs()
             self.refresh_table()
+            # 刷新分组列表（更新计数）
+            if entry_type in ["discourse", "dialogue"]:
+                self.refresh_group_list(entry_type)
             self.statusBar().showMessage("添加成功", 3000)
         except Exception as e:
             QMessageBox.critical(self, "错误", f"添加失败: {str(e)}")
@@ -482,16 +653,36 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "输入错误", "原文和翻译不能为空！")
             return
         
+        entry_type = self.get_current_entry_type()
+        
+        # 对于语篇和对话，检查是否选择了分组
+        group_id = ""
+        group_name = ""
+        if entry_type in ["discourse", "dialogue"]:
+            group_id, group_name = self.get_selected_group_info(entry_type)
+            if not group_id:
+                type_label = "语篇" if entry_type == "discourse" else "对话"
+                QMessageBox.warning(
+                    self, 
+                    "输入错误", 
+                    f"请先选择或创建{type_label}！\n\n点击'新建'按钮可以创建新的{type_label}。"
+                )
+                return
+        
         try:
-            entry_type = self.get_current_entry_type()
             self.db.update_entry(
                 self.current_entry_id, example_id, source_text, gloss, translation, notes,
                 source_text_cn, gloss_cn, translation_cn,
-                entry_type=entry_type
+                entry_type=entry_type,
+                group_id=group_id,
+                group_name=group_name
             )
             QMessageBox.information(self, "成功", "语料更新成功！")
             self.clear_inputs()
             self.refresh_table()
+            # 刷新分组列表（更新计数）
+            if entry_type in ["discourse", "dialogue"]:
+                self.refresh_group_list(entry_type)
             self.statusBar().showMessage("更新成功", 3000)
         except Exception as e:
             QMessageBox.critical(self, "错误", f"更新失败: {str(e)}")
