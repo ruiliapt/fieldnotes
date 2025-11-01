@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fieldnote"
-version = "0.1.2"
+version = "0.1.3"
 description = "田野笔记管理工具 - A lightweight fieldnote management tool for linguistic fieldwork"
 authors = ["Your Name <your.email@example.com>"]
 license = "MIT"
