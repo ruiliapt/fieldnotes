@@ -76,45 +76,52 @@ class MainWindow(QMainWindow):
         input_layout = QFormLayout()
         input_group.setLayout(input_layout)
         
+        # 例句编号
         self.example_id_input = QLineEdit()
         self.example_id_input.setPlaceholderText("例：CJ001")
         input_layout.addRow("例句编号:", self.example_id_input)
         
+        # 原文
         self.source_text_input = QTextEdit()
         self.source_text_input.setMaximumHeight(60)
         self.source_text_input.setPlaceholderText("输入原文（支持IPA和Unicode字符）")
         input_layout.addRow("原文:", self.source_text_input)
         
-        self.gloss_input = QTextEdit()
-        self.gloss_input.setMaximumHeight(60)
-        self.gloss_input.setPlaceholderText("输入词汇分解/注释")
-        input_layout.addRow("词汇分解:", self.gloss_input)
-        
-        self.translation_input = QTextEdit()
-        self.translation_input.setMaximumHeight(60)
-        self.translation_input.setPlaceholderText("输入翻译")
-        input_layout.addRow("翻译:", self.translation_input)
-        
-        self.notes_input = QTextEdit()
-        self.notes_input.setMaximumHeight(60)
-        self.notes_input.setPlaceholderText("输入备注（可选）")
-        input_layout.addRow("备注:", self.notes_input)
-        
-        # 汉字注释字段
+        # 原文(汉字) - 紧跟原文
         self.source_text_cn_input = QTextEdit()
         self.source_text_cn_input.setMaximumHeight(60)
         self.source_text_cn_input.setPlaceholderText("输入原文的汉字注释（可选）")
         input_layout.addRow("原文(汉字):", self.source_text_cn_input)
         
+        # 词汇分解
+        self.gloss_input = QTextEdit()
+        self.gloss_input.setMaximumHeight(60)
+        self.gloss_input.setPlaceholderText("输入词汇分解/注释")
+        input_layout.addRow("词汇分解:", self.gloss_input)
+        
+        # 词汇分解(汉字) - 紧跟词汇分解
         self.gloss_cn_input = QTextEdit()
         self.gloss_cn_input.setMaximumHeight(60)
         self.gloss_cn_input.setPlaceholderText("输入词汇分解的汉字注释（可选）")
         input_layout.addRow("词汇分解(汉字):", self.gloss_cn_input)
         
+        # 翻译
+        self.translation_input = QTextEdit()
+        self.translation_input.setMaximumHeight(60)
+        self.translation_input.setPlaceholderText("输入翻译")
+        input_layout.addRow("翻译:", self.translation_input)
+        
+        # 翻译(汉字) - 紧跟翻译
         self.translation_cn_input = QTextEdit()
         self.translation_cn_input.setMaximumHeight(60)
         self.translation_cn_input.setPlaceholderText("输入翻译的汉字版本（可选）")
         input_layout.addRow("翻译(汉字):", self.translation_cn_input)
+        
+        # 备注
+        self.notes_input = QTextEdit()
+        self.notes_input.setMaximumHeight(60)
+        self.notes_input.setPlaceholderText("输入备注（可选）")
+        input_layout.addRow("备注:", self.notes_input)
         
         layout.addWidget(input_group)
         
