@@ -267,8 +267,10 @@ class WordExporter:
                 translation = entry.get('translation', '').strip()
                 notes = entry.get('notes', '').strip()
                 
-                # 如果有空格，进行词对齐
-                if ' ' in source_text and ' ' in gloss:
+                # 如果有多个词（分词后长度>1），进行词对齐
+                source_has_words = ' ' in source_text and len(source_text.split()) > 1
+                gloss_has_words = ' ' in gloss and len(gloss.split()) > 1
+                if source_has_words and gloss_has_words:
                     source_words = source_text.split()
                     gloss_words = gloss.split()
                     
