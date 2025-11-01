@@ -171,9 +171,9 @@ class MainWindow(QMainWindow):
         list_group.setLayout(list_layout)
         
         self.data_table = QTableWidget()
-        self.data_table.setColumnCount(6)
+        self.data_table.setColumnCount(9)
         self.data_table.setHorizontalHeaderLabels(
-            ["ID", "例句编号", "原文", "词汇分解", "翻译", "备注"]
+            ["ID", "例句编号", "原文", "原文(汉字)", "词汇分解", "词汇分解(汉字)", "翻译", "翻译(汉字)", "备注"]
         )
         self.data_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.data_table.cellClicked.connect(self.load_entry_to_form)
@@ -226,9 +226,9 @@ class MainWindow(QMainWindow):
         
         # 搜索结果表格
         self.search_table = QTableWidget()
-        self.search_table.setColumnCount(6)
+        self.search_table.setColumnCount(9)
         self.search_table.setHorizontalHeaderLabels(
-            ["ID", "例句编号", "原文", "词汇分解", "翻译", "备注"]
+            ["ID", "例句编号", "原文", "原文(汉字)", "词汇分解", "词汇分解(汉字)", "翻译", "翻译(汉字)", "备注"]
         )
         self.search_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         layout.addWidget(self.search_table)
@@ -621,9 +621,12 @@ class MainWindow(QMainWindow):
             self.data_table.setItem(row, 0, QTableWidgetItem(str(entry['id'])))
             self.data_table.setItem(row, 1, QTableWidgetItem(entry['example_id'] or ""))
             self.data_table.setItem(row, 2, QTableWidgetItem(entry['source_text'] or ""))
-            self.data_table.setItem(row, 3, QTableWidgetItem(entry['gloss'] or ""))
-            self.data_table.setItem(row, 4, QTableWidgetItem(entry['translation'] or ""))
-            self.data_table.setItem(row, 5, QTableWidgetItem(entry['notes'] or ""))
+            self.data_table.setItem(row, 3, QTableWidgetItem(entry.get('source_text_cn', "") or ""))
+            self.data_table.setItem(row, 4, QTableWidgetItem(entry['gloss'] or ""))
+            self.data_table.setItem(row, 5, QTableWidgetItem(entry.get('gloss_cn', "") or ""))
+            self.data_table.setItem(row, 6, QTableWidgetItem(entry['translation'] or ""))
+            self.data_table.setItem(row, 7, QTableWidgetItem(entry.get('translation_cn', "") or ""))
+            self.data_table.setItem(row, 8, QTableWidgetItem(entry['notes'] or ""))
         
         self.data_table.resizeColumnsToContents()
         self.stats_label.setText(f"总计: {len(entries)} 条语料")
@@ -653,9 +656,12 @@ class MainWindow(QMainWindow):
             self.search_table.setItem(row, 0, QTableWidgetItem(str(entry['id'])))
             self.search_table.setItem(row, 1, QTableWidgetItem(entry['example_id'] or ""))
             self.search_table.setItem(row, 2, QTableWidgetItem(entry['source_text'] or ""))
-            self.search_table.setItem(row, 3, QTableWidgetItem(entry['gloss'] or ""))
-            self.search_table.setItem(row, 4, QTableWidgetItem(entry['translation'] or ""))
-            self.search_table.setItem(row, 5, QTableWidgetItem(entry['notes'] or ""))
+            self.search_table.setItem(row, 3, QTableWidgetItem(entry.get('source_text_cn', "") or ""))
+            self.search_table.setItem(row, 4, QTableWidgetItem(entry['gloss'] or ""))
+            self.search_table.setItem(row, 5, QTableWidgetItem(entry.get('gloss_cn', "") or ""))
+            self.search_table.setItem(row, 6, QTableWidgetItem(entry['translation'] or ""))
+            self.search_table.setItem(row, 7, QTableWidgetItem(entry.get('translation_cn', "") or ""))
+            self.search_table.setItem(row, 8, QTableWidgetItem(entry['notes'] or ""))
         
         self.search_table.resizeColumnsToContents()
         self.search_stats_label.setText(f"搜索结果: {len(results)} 条")
