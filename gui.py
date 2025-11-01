@@ -71,9 +71,39 @@ class MainWindow(QMainWindow):
         self.update_status_bar()
     
     def create_data_tab(self):
-        """创建数据管理标签页"""
+        """创建数据管理标签页（包含4个子Tab）"""
         widget = QWidget()
-        # 使用水平布局：左边录入，右边列表
+        main_layout = QVBoxLayout()
+        widget.setLayout(main_layout)
+        
+        # 创建子Tab容器
+        self.data_sub_tabs = QTabWidget()
+        main_layout.addWidget(self.data_sub_tabs)
+        
+        # 创建4个子Tab
+        self.word_tab = self.create_word_tab()
+        self.sentence_tab = self.create_sentence_tab()
+        self.discourse_tab = self.create_discourse_tab()
+        self.dialogue_tab = self.create_dialogue_tab()
+        
+        self.data_sub_tabs.addTab(self.word_tab, "单词")
+        self.data_sub_tabs.addTab(self.sentence_tab, "单句")
+        self.data_sub_tabs.addTab(self.discourse_tab, "语篇")
+        self.data_sub_tabs.addTab(self.dialogue_tab, "对话")
+        
+        # 当Tab切换时刷新表格
+        self.data_sub_tabs.currentChanged.connect(lambda: self.refresh_table())
+        
+        return widget
+    
+    def create_entry_type_tab(self, entry_type, type_label):
+        """通用的条目类型Tab创建方法
+        
+        Args:
+            entry_type: word/sentence/discourse/dialogue
+            type_label: 显示标签（单词/单句/语篇/对话）
+        """
+        widget = QWidget()
         main_layout = QHBoxLayout()
         widget.setLayout(main_layout)
         
@@ -81,7 +111,7 @@ class MainWindow(QMainWindow):
         left_widget = QWidget()
         left_layout = QVBoxLayout()
         left_widget.setLayout(left_layout)
-        left_widget.setMaximumWidth(500)  # 限制左侧宽度
+        left_widget.setMaximumWidth(500)
         
         # 输入区域
         input_group = QGroupBox("语料录入")
@@ -248,7 +278,34 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(left_widget)
         main_layout.addWidget(right_widget)
         
+        # 存储当前Tab的类型信息
+        widget.setProperty("entry_type", entry_type)
+        widget.setProperty("type_label", type_label)
+        
         return widget
+    
+    def create_word_tab(self):
+        """创建单词Tab"""
+        return self.create_entry_type_tab("word", "单词")
+    
+    def create_sentence_tab(self):
+        """创建单句Tab"""
+        return self.create_entry_type_tab("sentence", "单句")
+    
+    def create_discourse_tab(self):
+        """创建语篇Tab"""
+        return self.create_entry_type_tab("discourse", "语篇")
+    
+    def create_dialogue_tab(self):
+        """创建对话Tab"""
+        return self.create_entry_type_tab("dialogue", "对话")
+    
+    def get_current_entry_type(self):
+        """获取当前选中Tab的条目类型"""
+        current_widget = self.data_sub_tabs.currentWidget()
+        if current_widget:
+            return current_widget.property("entry_type") or "sentence"
+        return "sentence"
     
     def create_search_tab(self):
         """创建检索标签页"""
@@ -395,8 +452,10 @@ class MainWindow(QMainWindow):
             return
         
         try:
+            entry_type = self.get_current_entry_type()
             self.db.insert_entry(example_id, source_text, gloss, translation, notes,
-                               source_text_cn, gloss_cn, translation_cn)
+                               source_text_cn, gloss_cn, translation_cn,
+                               entry_type=entry_type)
             QMessageBox.information(self, "成功", "语料添加成功！")
             self.clear_inputs()
             self.refresh_table()
@@ -424,9 +483,11 @@ class MainWindow(QMainWindow):
             return
         
         try:
+            entry_type = self.get_current_entry_type()
             self.db.update_entry(
                 self.current_entry_id, example_id, source_text, gloss, translation, notes,
-                source_text_cn, gloss_cn, translation_cn
+                source_text_cn, gloss_cn, translation_cn,
+                entry_type=entry_type
             )
             QMessageBox.information(self, "成功", "语料更新成功！")
             self.clear_inputs()
@@ -680,8 +741,9 @@ class MainWindow(QMainWindow):
                 )
     
     def refresh_table(self):
-        """刷新数据表格"""
-        entries = self.db.get_all_entries()
+        """刷新数据表格（根据当前Tab显示对应类型的数据）"""
+        entry_type = self.get_current_entry_type()
+        entries = self.db.get_entries_by_type(entry_type)
         self.data_table.setRowCount(len(entries))
         
         for row, entry in enumerate(entries):
@@ -696,7 +758,11 @@ class MainWindow(QMainWindow):
             self.data_table.setItem(row, 8, QTableWidgetItem(entry['notes'] or ""))
         
         self.data_table.resizeColumnsToContents()
-        self.stats_label.setText(f"总计: {len(entries)} 条语料")
+        
+        # 获取类型标签
+        current_widget = self.data_sub_tabs.currentWidget()
+        type_label = current_widget.property("type_label") if current_widget else "语料"
+        self.stats_label.setText(f"{type_label}总计: {len(entries)} 条")
     
     def search_entries(self):
         """搜索语料"""
