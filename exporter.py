@@ -104,7 +104,7 @@ class TextFormatter:
     
     @staticmethod
     def format_entry(entry: Dict, show_numbering: bool = True, number_format: str = "()",
-                    max_words_per_line: int = 10) -> str:
+                    max_words_per_line: int = 10, include_chinese: bool = False) -> str:
         """
         格式化单条语料为标准语言学格式（Leipzig Glossing Rules）
         支持长句自动分行
@@ -114,6 +114,7 @@ class TextFormatter:
             show_numbering: 是否显示编号
             number_format: 编号格式 "()" 或 "."
             max_words_per_line: 每行最多显示的词数（默认10）
+            include_chinese: 是否包含汉字注释字段
             
         Returns:
             格式化后的文本
@@ -141,6 +142,11 @@ class TextFormatter:
         gloss = entry.get('gloss', '').strip()
         translation = entry.get('translation', '').strip()
         notes = entry.get('notes', '').strip()
+        
+        # 汉字字段（如果包含）
+        source_text_cn = entry.get('source_text_cn', '').strip() if include_chinese else ""
+        gloss_cn = entry.get('gloss_cn', '').strip() if include_chinese else ""
+        translation_cn = entry.get('translation_cn', '').strip() if include_chinese else ""
         
         # 计算缩进空格数（编号的长度）
         indent_spaces = ' ' * len(numbering_text)
@@ -195,6 +201,14 @@ class TextFormatter:
                     lines.append(f"    '{translation}'")
             elif notes:
                 lines.append(f"    ({notes})")
+            
+            # 汉字字段（多词情况）
+            if source_text_cn:
+                lines.append(f"    【原文(汉字)】{source_text_cn}")
+            if gloss_cn:
+                lines.append(f"    【词汇分解(汉字)】{gloss_cn}")
+            if translation_cn:
+                lines.append(f"    【翻译(汉字)】{translation_cn}")
         else:
             # 单词情况：编号和原文在同一行
             lines.append(f"{numbering_text}{source_text}")
@@ -211,12 +225,20 @@ class TextFormatter:
                     lines.append(f"{indent_spaces}'{translation}'")
             elif notes:
                 lines.append(f"{indent_spaces}({notes})")
+            
+            # 汉字字段（单词情况）
+            if source_text_cn:
+                lines.append(f"{indent_spaces}【原文(汉字)】{source_text_cn}")
+            if gloss_cn:
+                lines.append(f"{indent_spaces}【词汇分解(汉字)】{gloss_cn}")
+            if translation_cn:
+                lines.append(f"{indent_spaces}【翻译(汉字)】{translation_cn}")
         
         return '\n'.join(lines)
     
     @staticmethod
     def format_entries(entries: List[Dict], show_numbering: bool = True, 
-                      number_format: str = "()") -> str:
+                      number_format: str = "()", include_chinese: bool = False) -> str:
         """
         格式化多条语料
         
@@ -224,13 +246,15 @@ class TextFormatter:
             entries: 语料记录列表
             show_numbering: 是否显示编号
             number_format: 编号格式 "()" 或 "."
+            include_chinese: 是否包含汉字注释字段
             
         Returns:
             格式化后的文本
         """
         formatted = []
         for entry in entries:
-            formatted.append(TextFormatter.format_entry(entry, show_numbering, number_format))
+            formatted.append(TextFormatter.format_entry(entry, show_numbering, number_format, 
+                                                       include_chinese=include_chinese))
             formatted.append('')  # 空行分隔每条语料
         
         return '\n'.join(formatted)
@@ -248,7 +272,8 @@ class WordExporter:
                font_size: int = 10,
                line_spacing: float = 1.15,
                show_numbering: bool = True,
-               entries_per_page: int = 10) -> bool:
+               entries_per_page: int = 10,
+               include_chinese: bool = False) -> bool:
         """
         导出语料到Word文档（词对词对齐，透明表格）
         
@@ -260,6 +285,7 @@ class WordExporter:
             line_spacing: 行距
             show_numbering: 是否显示编号
             entries_per_page: 每页语料数（暂未实现分页）
+            include_chinese: 是否包含汉字注释字段
             
         Returns:
             是否导出成功
@@ -285,6 +311,11 @@ class WordExporter:
                 gloss = entry.get('gloss', '').strip()
                 translation = entry.get('translation', '').strip()
                 notes = entry.get('notes', '').strip()
+                
+                # 汉字字段（如果包含）
+                source_text_cn = entry.get('source_text_cn', '').strip() if include_chinese else ""
+                gloss_cn = entry.get('gloss_cn', '').strip() if include_chinese else ""
+                translation_cn = entry.get('translation_cn', '').strip() if include_chinese else ""
                 
                 # 如果有多个词（分词后长度>1），进行词对齐
                 source_has_words = ' ' in source_text and len(source_text.split()) > 1
@@ -409,12 +440,44 @@ class WordExporter:
                         p3.paragraph_format.left_indent = Cm(indent_cm)
                         p3.paragraph_format.space_after = Pt(2)
                         p3.paragraph_format.space_before = Pt(0)
+                    
+                    # 汉字字段（单词情况）
+                    if source_text_cn:
+                        p_cn = self.doc.add_paragraph(f"【原文(汉字)】{source_text_cn}")
+                        p_cn.runs[0].font.size = Pt(font_size - 1)
+                        p_cn.paragraph_format.left_indent = Cm(indent_cm)
+                        p_cn.paragraph_format.space_after = Pt(2)
+                        p_cn.paragraph_format.space_before = Pt(0)
+                    if gloss_cn:
+                        p_cn = self.doc.add_paragraph(f"【词汇分解(汉字)】{gloss_cn}")
+                        p_cn.runs[0].font.size = Pt(font_size - 1)
+                        p_cn.paragraph_format.left_indent = Cm(indent_cm)
+                        p_cn.paragraph_format.space_after = Pt(2)
+                        p_cn.paragraph_format.space_before = Pt(0)
+                    if translation_cn:
+                        p_cn = self.doc.add_paragraph(f"【翻译(汉字)】{translation_cn}")
+                        p_cn.runs[0].font.size = Pt(font_size - 1)
+                        p_cn.paragraph_format.left_indent = Cm(indent_cm)
+                        p_cn.paragraph_format.space_after = Pt(2)
+                        p_cn.paragraph_format.space_before = Pt(0)
                 
                 # 添加备注（在表格外，与原文第一个词对齐）
                 if notes:
                     note_p = self.doc.add_paragraph(f"    ({notes})")
                     note_p.runs[0].font.size = Pt(font_size - 1)
                     note_p.runs[0].italic = True
+                
+                # 汉字字段（多词情况，在表格和备注之后）
+                if source_text_cn or gloss_cn or translation_cn:
+                    if source_text_cn:
+                        p_cn = self.doc.add_paragraph(f"    【原文(汉字)】{source_text_cn}")
+                        p_cn.runs[0].font.size = Pt(font_size - 1)
+                    if gloss_cn:
+                        p_cn = self.doc.add_paragraph(f"    【词汇分解(汉字)】{gloss_cn}")
+                        p_cn.runs[0].font.size = Pt(font_size - 1)
+                    if translation_cn:
+                        p_cn = self.doc.add_paragraph(f"    【翻译(汉字)】{translation_cn}")
+                        p_cn.runs[0].font.size = Pt(font_size - 1)
                 
                 # 添加段落间距
                 self.doc.add_paragraph()

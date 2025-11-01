@@ -46,13 +46,40 @@ class CorpusDatabase:
                 source_text TEXT,
                 gloss TEXT,
                 translation TEXT,
-                notes TEXT
+                notes TEXT,
+                source_text_cn TEXT,
+                gloss_cn TEXT,
+                translation_cn TEXT
             )
         """)
         self.connection.commit()
+        
+        # 检查并添加新字段（用于数据库迁移）
+        self._migrate_add_chinese_fields()
+    
+    def _migrate_add_chinese_fields(self):
+        """数据库迁移：添加汉字字段（如果不存在）"""
+        try:
+            # 检查是否已有汉字字段
+            self.cursor.execute("PRAGMA table_info(corpus)")
+            columns = [row[1] for row in self.cursor.fetchall()]
+            
+            # 添加缺失的字段
+            if 'source_text_cn' not in columns:
+                self.cursor.execute("ALTER TABLE corpus ADD COLUMN source_text_cn TEXT")
+            if 'gloss_cn' not in columns:
+                self.cursor.execute("ALTER TABLE corpus ADD COLUMN gloss_cn TEXT")
+            if 'translation_cn' not in columns:
+                self.cursor.execute("ALTER TABLE corpus ADD COLUMN translation_cn TEXT")
+            
+            self.connection.commit()
+        except Exception as e:
+            print(f"数据库迁移失败: {e}")
     
     def insert_entry(self, example_id: str, source_text: str, gloss: str, 
-                     translation: str, notes: str = "") -> int:
+                     translation: str, notes: str = "", 
+                     source_text_cn: str = "", gloss_cn: str = "", 
+                     translation_cn: str = "") -> int:
         """
         插入一条语料记录
         
@@ -62,19 +89,26 @@ class CorpusDatabase:
             gloss: 词汇分解/注释
             translation: 翻译
             notes: 备注
+            source_text_cn: 原文(汉字)
+            gloss_cn: 词汇分解(汉字)
+            translation_cn: 翻译(汉字)
             
         Returns:
             新插入记录的ID
         """
         self.cursor.execute("""
-            INSERT INTO corpus (example_id, source_text, gloss, translation, notes)
-            VALUES (?, ?, ?, ?, ?)
-        """, (example_id, source_text, gloss, translation, notes))
+            INSERT INTO corpus (example_id, source_text, gloss, translation, notes, 
+                              source_text_cn, gloss_cn, translation_cn)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (example_id, source_text, gloss, translation, notes, 
+              source_text_cn, gloss_cn, translation_cn))
         self.connection.commit()
         return self.cursor.lastrowid
     
     def update_entry(self, entry_id: int, example_id: str, source_text: str, 
-                     gloss: str, translation: str, notes: str = "") -> bool:
+                     gloss: str, translation: str, notes: str = "",
+                     source_text_cn: str = "", gloss_cn: str = "", 
+                     translation_cn: str = "") -> bool:
         """
         更新一条语料记录
         
@@ -85,15 +119,20 @@ class CorpusDatabase:
             gloss: 词汇分解/注释
             translation: 翻译
             notes: 备注
+            source_text_cn: 原文(汉字)
+            gloss_cn: 词汇分解(汉字)
+            translation_cn: 翻译(汉字)
             
         Returns:
             是否更新成功
         """
         self.cursor.execute("""
             UPDATE corpus 
-            SET example_id = ?, source_text = ?, gloss = ?, translation = ?, notes = ?
+            SET example_id = ?, source_text = ?, gloss = ?, translation = ?, notes = ?,
+                source_text_cn = ?, gloss_cn = ?, translation_cn = ?
             WHERE id = ?
-        """, (example_id, source_text, gloss, translation, notes, entry_id))
+        """, (example_id, source_text, gloss, translation, notes, 
+              source_text_cn, gloss_cn, translation_cn, entry_id))
         self.connection.commit()
         return self.cursor.rowcount > 0
     
@@ -200,7 +239,10 @@ class CorpusDatabase:
                     source_text=entry.get("source_text", ""),
                     gloss=entry.get("gloss", ""),
                     translation=entry.get("translation", ""),
-                    notes=entry.get("notes", "")
+                    notes=entry.get("notes", ""),
+                    source_text_cn=entry.get("source_text_cn", ""),
+                    gloss_cn=entry.get("gloss_cn", ""),
+                    translation_cn=entry.get("translation_cn", "")
                 )
                 count += 1
             except Exception as e:

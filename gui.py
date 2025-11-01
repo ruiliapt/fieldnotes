@@ -100,6 +100,22 @@ class MainWindow(QMainWindow):
         self.notes_input.setPlaceholderText("输入备注（可选）")
         input_layout.addRow("备注:", self.notes_input)
         
+        # 汉字注释字段
+        self.source_text_cn_input = QTextEdit()
+        self.source_text_cn_input.setMaximumHeight(60)
+        self.source_text_cn_input.setPlaceholderText("输入原文的汉字注释（可选）")
+        input_layout.addRow("原文(汉字):", self.source_text_cn_input)
+        
+        self.gloss_cn_input = QTextEdit()
+        self.gloss_cn_input.setMaximumHeight(60)
+        self.gloss_cn_input.setPlaceholderText("输入词汇分解的汉字注释（可选）")
+        input_layout.addRow("词汇分解(汉字):", self.gloss_cn_input)
+        
+        self.translation_cn_input = QTextEdit()
+        self.translation_cn_input.setMaximumHeight(60)
+        self.translation_cn_input.setPlaceholderText("输入翻译的汉字版本（可选）")
+        input_layout.addRow("翻译(汉字):", self.translation_cn_input)
+        
         layout.addWidget(input_group)
         
         # 按钮区域
@@ -220,6 +236,11 @@ class MainWindow(QMainWindow):
         self.show_numbering_checkbox.setChecked(True)
         format_layout.addRow("显示编号:", self.show_numbering_checkbox)
         
+        self.include_chinese_checkbox = QCheckBox()
+        self.include_chinese_checkbox.setChecked(False)
+        self.include_chinese_checkbox.setToolTip("导出时包含原文(汉字)、词汇分解(汉字)、翻译(汉字)字段")
+        format_layout.addRow("包含汉字注释:", self.include_chinese_checkbox)
+        
         layout.addWidget(format_group)
         
         # 导出按钮区域
@@ -274,13 +295,17 @@ class MainWindow(QMainWindow):
         gloss = self.gloss_input.toPlainText().strip()
         translation = self.translation_input.toPlainText().strip()
         notes = self.notes_input.toPlainText().strip()
+        source_text_cn = self.source_text_cn_input.toPlainText().strip()
+        gloss_cn = self.gloss_cn_input.toPlainText().strip()
+        translation_cn = self.translation_cn_input.toPlainText().strip()
         
         if not source_text or not translation:
             QMessageBox.warning(self, "输入错误", "原文和翻译不能为空！")
             return
         
         try:
-            self.db.insert_entry(example_id, source_text, gloss, translation, notes)
+            self.db.insert_entry(example_id, source_text, gloss, translation, notes,
+                               source_text_cn, gloss_cn, translation_cn)
             QMessageBox.information(self, "成功", "语料添加成功！")
             self.clear_inputs()
             self.refresh_table()
@@ -299,6 +324,9 @@ class MainWindow(QMainWindow):
         gloss = self.gloss_input.toPlainText().strip()
         translation = self.translation_input.toPlainText().strip()
         notes = self.notes_input.toPlainText().strip()
+        source_text_cn = self.source_text_cn_input.toPlainText().strip()
+        gloss_cn = self.gloss_cn_input.toPlainText().strip()
+        translation_cn = self.translation_cn_input.toPlainText().strip()
         
         if not source_text or not translation:
             QMessageBox.warning(self, "输入错误", "原文和翻译不能为空！")
@@ -306,7 +334,8 @@ class MainWindow(QMainWindow):
         
         try:
             self.db.update_entry(
-                self.current_entry_id, example_id, source_text, gloss, translation, notes
+                self.current_entry_id, example_id, source_text, gloss, translation, notes,
+                source_text_cn, gloss_cn, translation_cn
             )
             QMessageBox.information(self, "成功", "语料更新成功！")
             self.clear_inputs()
@@ -343,6 +372,9 @@ class MainWindow(QMainWindow):
         self.gloss_input.clear()
         self.translation_input.clear()
         self.notes_input.clear()
+        self.source_text_cn_input.clear()
+        self.gloss_cn_input.clear()
+        self.translation_cn_input.clear()
         self.current_entry_id = None
     
     def load_entry_to_form(self, row, column):
@@ -357,6 +389,9 @@ class MainWindow(QMainWindow):
             self.gloss_input.setPlainText(entry['gloss'] or "")
             self.translation_input.setPlainText(entry['translation'] or "")
             self.notes_input.setPlainText(entry['notes'] or "")
+            self.source_text_cn_input.setPlainText(entry.get('source_text_cn', "") or "")
+            self.gloss_cn_input.setPlainText(entry.get('gloss_cn', "") or "")
+            self.translation_cn_input.setPlainText(entry.get('translation_cn', "") or "")
     
     def create_menu_bar(self):
         """创建菜单栏"""
@@ -648,9 +683,11 @@ class MainWindow(QMainWindow):
         
         # 获取格式参数
         show_numbering = self.show_numbering_checkbox.isChecked()
+        include_chinese = self.include_chinese_checkbox.isChecked()
         
         # 生成格式化文本
-        formatted_text = TextFormatter.format_entries(entries, show_numbering)
+        formatted_text = TextFormatter.format_entries(entries, show_numbering, 
+                                                     include_chinese=include_chinese)
         
         # 显示在文本框中
         self.formatted_text_display.setPlainText(formatted_text)
@@ -704,6 +741,7 @@ class MainWindow(QMainWindow):
         
         # 获取导出参数
         show_numbering = self.show_numbering_checkbox.isChecked()
+        include_chinese = self.include_chinese_checkbox.isChecked()
         
         # 执行导出
         try:
@@ -713,7 +751,8 @@ class MainWindow(QMainWindow):
                 font_size=10,
                 line_spacing=1.15,
                 show_numbering=show_numbering,
-                entries_per_page=10
+                entries_per_page=10,
+                include_chinese=include_chinese
             )
             
             if success:
