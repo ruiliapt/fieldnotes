@@ -94,5 +94,9 @@ poetry.lock
 *.dmg
 *.AppImage
 
+# Release files
+release-*/
+releases/
+
 # Test files (keep sample data)
 test_*.docx

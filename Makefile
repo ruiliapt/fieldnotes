@@ -67,6 +67,9 @@ publish:  ## 发布到 PyPI（正式）
 release:  ## 创建新版本发布（交互式）
 	./scripts/release.sh
 
+prepare-release:  ## 准备 GitHub Release（构建+打包）
+	./scripts/prepare_release.sh
+
 version:  ## 显示当前版本
 	@poetry version
 
