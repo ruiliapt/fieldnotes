@@ -10,6 +10,11 @@ if getattr(sys, 'frozen', False):
     # 运行在打包后的环境中
     bundle_dir = sys._MEIPASS
     os.environ['QT_MAC_WANTS_LAYER'] = '1'
+    
+    # 禁用 Qt 权限检查（防止崩溃）
+    os.environ['QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM'] = '1'
+    os.environ['QT_LOGGING_RULES'] = 'qt.qpa.permissions=false'
+    
     # 确保 Qt 能找到插件
     plugin_path = os.path.join(bundle_dir, 'PyQt6', 'Qt6', 'plugins')
     if os.path.exists(plugin_path):

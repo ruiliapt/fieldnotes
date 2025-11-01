@@ -12,10 +12,10 @@ a = Analysis(
     binaries=[],
     datas=datas,
     hiddenimports=['PyQt6', 'PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtWidgets', 'PyQt6.sip', 'docx', 'docx.oxml', 'docx.oxml.ns', 'pandas', 'sqlite3', 'database', 'gui', 'exporter'],
-    hookspath=[],
+    hookspath=['hooks'],
     hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
+    runtime_hooks=['hooks/rthook_qt_permissions.py'],
+    excludes=['PyQt6.QtPositioning', 'PyQt6.QtLocation', 'PyQt6.QtBluetooth'],
     noarchive=False,
     optimize=0,
 )
