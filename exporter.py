@@ -358,29 +358,36 @@ class WordExporter:
                                 run.font.size = Pt(font_size)
                     
                 else:
-                    # 如果没有分词，使用原来的单列表格
-                    table = self.doc.add_table(rows=3, cols=1)
+                    # 如果没有分词，使用段落格式（不用表格）
+                    from docx.shared import Cm
                     
-                    # 移除边框
-                    tbl = table._tbl
-                    tblPr = tbl.tblPr
-                    if tblPr is None:
-                        tblPr = OxmlElement('w:tblPr')
-                        tbl.insert(0, tblPr)
+                    # 计算缩进量（编号的宽度）
+                    # 假设每个字符约 0.15cm，根据编号长度计算
+                    indent_cm = len(numbering_text) * 0.15 if numbering_text else 0
                     
-                    tblBorders = OxmlElement('w:tblBorders')
-                    for border_name in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
-                        border = OxmlElement(f'w:{border_name}')
-                        border.set(qn('w:val'), 'none')
-                        border.set(qn('w:sz'), '0')
-                        tblBorders.append(border)
-                    tblPr.append(tblBorders)
+                    # 第一行：编号 + 原文
+                    p1 = self.doc.add_paragraph()
+                    if numbering_text:
+                        p1.add_run(numbering_text).font.size = Pt(font_size)
+                    p1.add_run(source_text).font.size = Pt(font_size)
+                    p1.paragraph_format.space_after = Pt(2)
+                    p1.paragraph_format.space_before = Pt(0)
                     
-                    # 第一行加上编号
-                    table.rows[0].cells[0].text = numbering_text + source_text if numbering_text else source_text
-                    table.rows[1].cells[0].text = gloss
+                    # 第二行：gloss（左缩进与原文对齐）
+                    if gloss:
+                        p2 = self.doc.add_paragraph(gloss)
+                        p2.runs[0].font.size = Pt(font_size)
+                        p2.paragraph_format.left_indent = Cm(indent_cm)
+                        p2.paragraph_format.space_after = Pt(2)
+                        p2.paragraph_format.space_before = Pt(0)
+                    
+                    # 第三行：翻译（左缩进与原文对齐）
                     if translation:
-                        table.rows[2].cells[0].text = f"'{translation}'"
+                        p3 = self.doc.add_paragraph(f"'{translation}'")
+                        p3.runs[0].font.size = Pt(font_size)
+                        p3.paragraph_format.left_indent = Cm(indent_cm)
+                        p3.paragraph_format.space_after = Pt(2)
+                        p3.paragraph_format.space_before = Pt(0)
                 
                 # 添加备注（在表格外，与原文第一个词对齐）
                 if notes:
