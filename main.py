@@ -4,6 +4,18 @@ Fieldnote Lite - 主程序
 """
 import sys
 import os
+
+# 修复 Qt 路径问题（必须在导入 PyQt6 之前）
+if getattr(sys, 'frozen', False):
+    # 运行在打包后的环境中
+    bundle_dir = sys._MEIPASS
+    os.environ['QT_MAC_WANTS_LAYER'] = '1'
+    # 确保 Qt 能找到插件
+    plugin_path = os.path.join(bundle_dir, 'PyQt6', 'Qt6', 'plugins')
+    if os.path.exists(plugin_path):
+        os.environ['QT_PLUGIN_PATH'] = plugin_path
+        os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(plugin_path, 'platforms')
+
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import QLockFile, QDir
 from gui import MainWindow
