@@ -96,42 +96,49 @@ class MainWindow(QMainWindow):
         self.source_text_input = QTextEdit()
         self.source_text_input.setMaximumHeight(60)
         self.source_text_input.setPlaceholderText("输入原文（支持IPA和Unicode字符）")
+        self.setup_text_edit_context_menu(self.source_text_input)
         input_layout.addRow("原文:", self.source_text_input)
         
         # 原文(汉字) - 紧跟原文
         self.source_text_cn_input = QTextEdit()
         self.source_text_cn_input.setMaximumHeight(60)
         self.source_text_cn_input.setPlaceholderText("输入原文的汉字注释（可选）")
+        self.setup_text_edit_context_menu(self.source_text_cn_input)
         input_layout.addRow("原文(汉字):", self.source_text_cn_input)
         
         # 词汇分解
         self.gloss_input = QTextEdit()
         self.gloss_input.setMaximumHeight(60)
         self.gloss_input.setPlaceholderText("输入词汇分解/注释")
+        self.setup_text_edit_context_menu(self.gloss_input)
         input_layout.addRow("词汇分解:", self.gloss_input)
         
         # 词汇分解(汉字) - 紧跟词汇分解
         self.gloss_cn_input = QTextEdit()
         self.gloss_cn_input.setMaximumHeight(60)
         self.gloss_cn_input.setPlaceholderText("输入词汇分解的汉字注释（可选）")
+        self.setup_text_edit_context_menu(self.gloss_cn_input)
         input_layout.addRow("词汇分解(汉字):", self.gloss_cn_input)
         
         # 翻译
         self.translation_input = QTextEdit()
         self.translation_input.setMaximumHeight(60)
         self.translation_input.setPlaceholderText("输入翻译")
+        self.setup_text_edit_context_menu(self.translation_input)
         input_layout.addRow("翻译:", self.translation_input)
         
         # 翻译(汉字) - 紧跟翻译
         self.translation_cn_input = QTextEdit()
         self.translation_cn_input.setMaximumHeight(60)
         self.translation_cn_input.setPlaceholderText("输入翻译的汉字版本（可选）")
+        self.setup_text_edit_context_menu(self.translation_cn_input)
         input_layout.addRow("翻译(汉字):", self.translation_cn_input)
         
         # 备注
         self.notes_input = QTextEdit()
         self.notes_input.setMaximumHeight(60)
         self.notes_input.setPlaceholderText("输入备注（可选）")
+        self.setup_text_edit_context_menu(self.notes_input)
         input_layout.addRow("备注:", self.notes_input)
         
         left_layout.addWidget(input_group)
@@ -1129,6 +1136,89 @@ class MainWindow(QMainWindow):
             self.save_font_config()
             self.apply_fonts()
             QMessageBox.information(self, "成功", "字体设置已应用！")
+    
+    def setup_text_edit_context_menu(self, text_edit):
+        """为文本编辑框设置右键菜单"""
+        text_edit.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        text_edit.customContextMenuRequested.connect(
+            lambda pos: self.show_text_edit_context_menu(text_edit, pos)
+        )
+    
+    def show_text_edit_context_menu(self, text_edit, pos):
+        """显示文本编辑框的右键菜单"""
+        menu = text_edit.createStandardContextMenu()
+        
+        # 如果有选中文本，添加大小写转换选项
+        if text_edit.textCursor().hasSelection():
+            menu.addSeparator()
+            
+            # 全部大写（用于语法标签，如 NOM, ACC, PST）
+            upper_action = QAction("转为大写 (NOM)", self)
+            upper_action.setShortcut("Ctrl+Shift+U")
+            upper_action.triggered.connect(lambda: self.transform_selected_text(text_edit, 'upper'))
+            menu.addAction(upper_action)
+            
+            # 全部小写
+            lower_action = QAction("转为小写 (nom)", self)
+            lower_action.setShortcut("Ctrl+Shift+L")
+            lower_action.triggered.connect(lambda: self.transform_selected_text(text_edit, 'lower'))
+            menu.addAction(lower_action)
+            
+            # 首字母大写
+            title_action = QAction("首字母大写 (Nom)", self)
+            title_action.setShortcut("Ctrl+Shift+T")
+            title_action.triggered.connect(lambda: self.transform_selected_text(text_edit, 'title'))
+            menu.addAction(title_action)
+            
+            # 小型大写（转为Unicode小型大写字母）
+            small_caps_action = QAction("小型大写 (ɴᴏᴍ)", self)
+            small_caps_action.setShortcut("Ctrl+Shift+C")
+            small_caps_action.triggered.connect(lambda: self.transform_selected_text(text_edit, 'small_caps'))
+            menu.addAction(small_caps_action)
+        
+        menu.exec(text_edit.mapToGlobal(pos))
+    
+    def transform_selected_text(self, text_edit, transform_type):
+        """转换选中的文本"""
+        cursor = text_edit.textCursor()
+        if not cursor.hasSelection():
+            return
+        
+        selected_text = cursor.selectedText()
+        
+        if transform_type == 'upper':
+            transformed = selected_text.upper()
+        elif transform_type == 'lower':
+            transformed = selected_text.lower()
+        elif transform_type == 'title':
+            transformed = selected_text.title()
+        elif transform_type == 'small_caps':
+            # 转换为Unicode小型大写字母
+            transformed = self.to_small_caps(selected_text)
+        else:
+            return
+        
+        cursor.insertText(transformed)
+    
+    def to_small_caps(self, text):
+        """将文本转换为Unicode小型大写字母"""
+        # Unicode小型大写字母映射表
+        small_caps_map = {
+            'A': 'ᴀ', 'B': 'ʙ', 'C': 'ᴄ', 'D': 'ᴅ', 'E': 'ᴇ', 'F': 'ꜰ', 'G': 'ɢ', 'H': 'ʜ',
+            'I': 'ɪ', 'J': 'ᴊ', 'K': 'ᴋ', 'L': 'ʟ', 'M': 'ᴍ', 'N': 'ɴ', 'O': 'ᴏ', 'P': 'ᴘ',
+            'Q': 'ǫ', 'R': 'ʀ', 'S': 'ꜱ', 'T': 'ᴛ', 'U': 'ᴜ', 'V': 'ᴠ', 'W': 'ᴡ', 'X': 'x',
+            'Y': 'ʏ', 'Z': 'ᴢ',
+            'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ꜰ', 'g': 'ɢ', 'h': 'ʜ',
+            'i': 'ɪ', 'j': 'ᴊ', 'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ', 'o': 'ᴏ', 'p': 'ᴘ',
+            'q': 'ǫ', 'r': 'ʀ', 's': 'ꜱ', 't': 'ᴛ', 'u': 'ᴜ', 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x',
+            'y': 'ʏ', 'z': 'ᴢ'
+        }
+        
+        result = []
+        for char in text:
+            result.append(small_caps_map.get(char, char))
+        
+        return ''.join(result)
     
     def closeEvent(self, event):
         """关闭事件处理"""
