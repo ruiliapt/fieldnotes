@@ -53,7 +53,7 @@ dist/
 
 # PyInstaller
 *.manifest
-*.spec
+# *.spec  # 注释掉，因为我们需要 Fieldnotes.spec
 
 # Testing
 .pytest_cache/

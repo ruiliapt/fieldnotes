@@ -135,7 +135,7 @@ jobs:
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
           
-          # 创建 Release Notes
+          # 创建 Release Notes 头部
           cat > release_notes.md << 'NOTES_EOF'
           ## Fieldnotes Lite ${{ steps.get_version.outputs.VERSION }}
           
@@ -182,12 +182,32 @@ jobs:
           
           NOTES_EOF
           
-          # 如果存在 CHANGELOG，追加到 Release Notes
-          if [ -f "CHANGELOG_${VERSION}.md" ]; then
+          # 从 CHANGELOG.md 提取当前版本的更新内容
+          if [ -f "CHANGELOG.md" ]; then
             echo "" >> release_notes.md
-            cat "CHANGELOG_${VERSION}.md" >> release_notes.md
+            echo "## 📋 更新内容" >> release_notes.md
+            echo "" >> release_notes.md
+            
+            # 提取版本号（去掉 v 前缀）
+            VERSION_NUM="${VERSION#v}"
+            
+            # 使用 awk 提取对应版本的内容
+            awk -v ver="$VERSION_NUM" '
+              /^## \['"$VERSION_NUM"'\]/ {found=1; next}
+              found && /^## \[/ {exit}
+              found {print}
+            ' CHANGELOG.md >> release_notes.md
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ 成功从 CHANGELOG.md 提取 ${VERSION} 的更新内容"
+            else
+              echo "⚠️ 无法从 CHANGELOG.md 提取内容，使用默认说明"
+              echo "详见 [CHANGELOG](https://github.com/ruiliapt/fieldnote/blob/main/CHANGELOG.md)" >> release_notes.md
+            fi
           else
-            echo "⚠️ 未找到 CHANGELOG_${VERSION}.md，使用默认发布说明"
+            echo "⚠️ 未找到 CHANGELOG.md"
+            echo "" >> release_notes.md
+            echo "详见项目 [README](https://github.com/ruiliapt/fieldnote/blob/main/README.md)" >> release_notes.md
           fi
           
           # 添加文档链接
@@ -198,6 +218,7 @@ jobs:
           ### 📖 文档与支持
           
           - **[README](https://github.com/ruiliapt/fieldnote/blob/main/README.md)** - 项目说明
+          - **[完整更新日志](https://github.com/ruiliapt/fieldnote/blob/main/CHANGELOG.md)** - 所有版本历史
           - **[快速指南](https://github.com/ruiliapt/fieldnote/blob/main/docs/user/ONE_PAGE_GUIDE.md)** - 5分钟上手
           - **[使用教程](https://github.com/ruiliapt/fieldnote/blob/main/docs/user/USER_GUIDE_NON_TECHNICAL.md)** - 详细图文
           - **[故障排查](https://github.com/ruiliapt/fieldnote/blob/main/docs/TROUBLESHOOTING.md)** - 常见问题
