@@ -273,22 +273,23 @@ A: 这可能是锁文件残留。运行 `./stop.sh`（macOS/Linux）或 `stop.ba
 
 ### 开发者文档
 
-- [发布指南](PUBLISHING.md) - 如何发布新版本
-- [快速发布](RELEASE_QUICKSTART.md) - 发布命令速查
-- [项目概览](PROJECT_OVERVIEW.md) - 技术架构说明
+- [跨平台打包指南](docs/developer/CROSS_PLATFORM_BUILD.md) ⭐ Windows/Linux/macOS 打包
+- [发布指南](docs/developer/PUBLISHING.md) - 如何发布新版本
+- [快速发布](docs/developer/RELEASE_QUICKSTART.md) - 发布命令速查
+- [项目概览](docs/developer/PROJECT_OVERVIEW.md) - 技术架构说明
 
 ## 面向不同用户的文档
 
 ### 🎓 语言学研究者（非技术用户）
-- **[一页纸快速指南](ONE_PAGE_GUIDE.md)** ⭐ 5分钟快速上手
-- **[非技术用户使用指南](USER_GUIDE_NON_TECHNICAL.md)** ⭐ 详细图文教程
-- [快速开始](QUICKSTART.md) - 功能介绍
+- **[一页纸快速指南](docs/user/ONE_PAGE_GUIDE.md)** ⭐ 5分钟快速上手
+- **[非技术用户使用指南](docs/user/USER_GUIDE_NON_TECHNICAL.md)** ⭐ 详细图文教程
+- [快速开始](docs/developer/QUICKSTART.md) - 功能介绍
 
 ### 👨‍💻 技术用户/开发者
-- [安装指南](INSTALL.md) - 详细安装说明
-- [项目概览](PROJECT_OVERVIEW.md) - 技术架构
-- [跨平台支持](PLATFORM_SUPPORT.md) - 平台兼容性
-- [发布指南](PUBLISHING.md) - 如何发布软件
+- [安装指南](docs/developer/INSTALL.md) - 详细安装说明
+- [项目概览](docs/developer/PROJECT_OVERVIEW.md) - 技术架构
+- [跨平台支持](docs/developer/PLATFORM_SUPPORT.md) - 平台兼容性
+- [发布指南](docs/developer/PUBLISHING.md) - 如何发布软件
 
 ## 联系方式
 
