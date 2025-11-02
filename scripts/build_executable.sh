@@ -37,7 +37,8 @@ rm -rf build dist
 echo ""
 echo "开始打包（macOS .app 模式，使用自定义 spec 排除问题插件）..."
 # 使用自定义 Fieldnotes.spec（已配置排除 Qt 权限插件）
-poetry run pyinstaller \
+# 使用 python -m PyInstaller 而不是 pyinstaller 命令（更可靠）
+poetry run python -m PyInstaller \
     --clean \
     --noconfirm \
     Fieldnotes.spec
