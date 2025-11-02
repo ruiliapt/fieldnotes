@@ -375,6 +375,19 @@ class WordExporter:
                             cell = row.cells[col_idx]
                             cell.width = col_width
                     
+                    # 设置所有行为根据内容自动调整高度
+                    for row in table.rows:
+                        tr = row._tr
+                        trPr = tr.get_or_add_trPr()
+                        # 移除固定高度设置（如果有）
+                        trHeight = trPr.find(qn('w:trHeight'))
+                        if trHeight is not None:
+                            trPr.remove(trHeight)
+                        # 添加自动调整高度设置
+                        trHeight = OxmlElement('w:trHeight')
+                        trHeight.set(qn('w:hRule'), 'auto')  # 根据内容自动调整
+                        trPr.append(trHeight)
+                    
                     # 填充第一行（原文）
                     for col_idx, word in enumerate(source_words):
                         cell = table.rows[0].cells[col_idx]
@@ -383,6 +396,12 @@ class WordExporter:
                             cell.text = numbering_text + word
                         else:
                             cell.text = word
+                        # 设置单元格垂直对齐为顶部
+                        tc = cell._tc
+                        tcPr = tc.get_or_add_tcPr()
+                        vAlign = OxmlElement('w:vAlign')
+                        vAlign.set(qn('w:val'), 'top')
+                        tcPr.append(vAlign)
                         # 设置单元格格式
                         for paragraph in cell.paragraphs:
                             paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
@@ -393,6 +412,12 @@ class WordExporter:
                     for col_idx, word in enumerate(gloss_words):
                         cell = table.rows[1].cells[col_idx]
                         cell.text = word
+                        # 设置单元格垂直对齐为顶部
+                        tc = cell._tc
+                        tcPr = tc.get_or_add_tcPr()
+                        vAlign = OxmlElement('w:vAlign')
+                        vAlign.set(qn('w:val'), 'top')
+                        tcPr.append(vAlign)
                         # 设置单元格格式
                         for paragraph in cell.paragraphs:
                             paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
@@ -408,6 +433,12 @@ class WordExporter:
                                 merged_cell.merge(table.rows[2].cells[col_idx])
                         
                         merged_cell.text = f"'{translation}'"
+                        # 设置单元格垂直对齐为顶部
+                        tc = merged_cell._tc
+                        tcPr = tc.get_or_add_tcPr()
+                        vAlign = OxmlElement('w:vAlign')
+                        vAlign.set(qn('w:val'), 'top')
+                        tcPr.append(vAlign)
                         for paragraph in merged_cell.paragraphs:
                             paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
                             for run in paragraph.runs:
