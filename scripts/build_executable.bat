@@ -6,11 +6,29 @@ echo   Fieldnotes Lite - 构建可执行文件
 echo ==========================================
 echo.
 
-REM 检查 PyInstaller
+REM 检查并安装 PyInstaller
+echo 检查 PyInstaller...
 poetry run python -c "import PyInstaller" 2>nul
 if errorlevel 1 (
-    echo 安装 PyInstaller...
-    poetry add --group dev pyinstaller
+    echo 警告：PyInstaller 未找到，尝试安装...
+    
+    REM 在 CI 环境中使用 pip 直接安装
+    if defined CI (
+        echo CI 环境检测到，使用 pip 安装...
+        poetry run pip install pyinstaller
+    ) else (
+        poetry add --group dev pyinstaller
+    )
+    
+    REM 再次检查
+    poetry run python -c "import PyInstaller" 2>nul
+    if errorlevel 1 (
+        echo 错误：PyInstaller 安装失败！
+        exit /b 1
+    )
+    echo 成功：PyInstaller 安装成功
+) else (
+    echo 成功：PyInstaller 已安装
 )
 
 REM 清理旧的构建
@@ -22,7 +40,8 @@ if exist *.spec del /q *.spec
 REM 打包
 echo.
 echo 开始打包...
-poetry run pyinstaller ^
+REM 使用 python -m PyInstaller 而不是 pyinstaller 命令（更可靠）
+poetry run python -m PyInstaller ^
     --name=Fieldnotes ^
     --windowed ^
     --add-data="README.md;." ^
