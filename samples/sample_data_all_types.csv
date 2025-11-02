@@ -1,0 +1,22 @@
+entry_type,example_id,source_text,gloss,translation,source_text_cn,gloss_cn,translation_cn,notes,group_id,group_name,speaker,turn_number
+word,W001,ŋa˧,1SG,I,我,第一人称单数,我,人称代词,,,,
+word,W002,tɕʰi˥,eat,eat,吃,动词：吃,吃,及物动词,,,,
+word,W003,fan˨˩,rice,rice,饭,名词：米饭,饭,主食,,,,
+sentence,S001,"ŋa˧ tə˥ tɕʰi˥ fan˨˩","1SG CLF eat rice","I eat rice",我吃饭,"我 量词 吃 饭",我吃饭,"日常用语，SVO语序",,,,
+sentence,S002,"ni˧ ho˧˥ ma˧","2SG good Q","How are you?",你好吗,"你 好 疑问",你好吗,问候语,,,,
+sentence,S003,"ŋa˧ hen˧˥ ho˧˥","1SG very good","I am very good",我很好,"我 很 好",我很好,状态表达,,,,
+discourse,D001-01,"jow˥˧ daw˥˧ gu˧˩","have INDEF monkey","There was a monkey",有一只猴子,"有 一只 猴子",有一只猴子,故事开头,D001,民间故事：猴子捞月,,
+discourse,D001-02,"ta˧ kan˧˥ ta˧˥ te˧ ɲia˥","3SG see water inside moon","It saw the moon in the water",它看到水里的月亮,"它 看到 水 里 月亮",它看到水里的月亮,情节发展,D001,民间故事：猴子捞月,,
+discourse,D001-03,"ta˧ ɕaw˧˥ ɕe˧ be˧˥ gu˧˩","3SG call other monkey","It called other monkeys",它叫来其他猴子,"它 叫 其他 猴子",它叫来其他猴子,情节发展,D001,民间故事：猴子捞月,,
+discourse,D001-04,"ta˧˩ me˧ tɕi˧ lɔ˥ ɲia˥","3PL together salvage moon","They salvaged the moon together",它们一起捞月亮,"它们 一起 捞 月亮",它们一起捞月亮,高潮,D001,民间故事：猴子捞月,,
+discourse,D001-05,"ke˧˥ te˧ ɲia˥ lɔ˥ pu˥˧ to˥","but moon salvage NEG up","But they couldn't salvage the moon",但是月亮捞不上来,"但是 月亮 捞 不 上来",但是月亮捞不上来,结局,D001,民间故事：猴子捞月,,
+dialogue,C001-T01,"tse˧ ko˧ to˥˧ ɕaw˧","this CLF how.much money","How much is this?",这个多少钱,"这 个 多少 钱",这个多少钱,询价,C001,买菜对话,顾客,1
+dialogue,C001-T02,"wu˥ kway˥","five dollar","Five dollars",五块钱,"五 块钱",五块钱,报价,C001,买菜对话,小贩,2
+dialogue,C001-T03,"taj˥ kuaj˥ la˧","too expensive SFP","Too expensive!",太贵了,"太 贵 了",太贵了,讨价还价,C001,买菜对话,顾客,3
+dialogue,C001-T04,"si˥ kway˥ ba˧","four dollar SFP","Four dollars then",四块钱吧,"四 块钱 吧",四块钱吧,还价,C001,买菜对话,小贩,4
+dialogue,C001-T05,"ho˧˥ ba˧","good SFP",Okay,好吧,"好 吧",好吧,成交,C001,买菜对话,顾客,5
+dialogue,C002-T01,"tsaj˧ le˧˥ pə˧˩","excuse Q","Excuse me",请问,请问,请问,客套语,C002,问路对话,路人A,1
+dialogue,C002-T02,"ɕe˧ ma˧ ɕe˧","what matter Q","What is it?",什么事,"什么 事",什么事,询问,C002,问路对话,路人B,2
+dialogue,C002-T03,"tɕo˧ jan˥ ke˧ tsaj˥ na˧˥ li˧","library at where","Where is the library?",图书馆在哪里,"图书馆 在 哪里",图书馆在哪里,问路,C002,问路对话,路人A,3
+dialogue,C002-T04,"taw˥ tɕɛn˧ lɛn˥ tsow˧˥","toward front walk","Go forward",往前走,"往 前 走",往前走,指路,C002,问路对话,路人B,4
+

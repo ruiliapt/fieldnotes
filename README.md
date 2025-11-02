@@ -181,23 +181,94 @@ python main.py
 
 ## 批量导入格式
 
+Fieldnotes Lite 支持四种数据类型：**单词**、**单句**、**语篇**、**对话**。
+
 ### JSON格式示例
 
+#### 单词 (word)
 ```json
 [
   {
-    "example_id": "CJ001",
+    "entry_type": "word",
+    "example_id": "W001",
+    "source_text": "ŋa˧",
+    "gloss": "1SG",
+    "translation": "我",
+    "source_text_cn": "我",
+    "gloss_cn": "第一人称单数",
+    "translation_cn": "我",
+    "notes": "人称代词"
+  }
+]
+```
+
+#### 单句 (sentence)
+```json
+[
+  {
+    "entry_type": "sentence",
+    "example_id": "S001",
     "source_text": "ŋa˧ tə˥ tɕʰi˥ fan˨˩",
     "gloss": "1SG CLF eat rice",
     "translation": "我吃饭",
+    "source_text_cn": "我吃饭",
+    "gloss_cn": "我 量词 吃 饭",
+    "translation_cn": "我吃饭",
     "notes": "日常用语"
+  }
+]
+```
+
+#### 语篇 (discourse)
+```json
+[
+  {
+    "entry_type": "discourse",
+    "group_id": "D001",
+    "group_name": "民间故事：猴子捞月",
+    "example_id": "D001-01",
+    "source_text": "jow˥˧ daw˥˧ gu˧˩",
+    "gloss": "have INDEF monkey",
+    "translation": "有一只猴子",
+    "notes": "故事开头"
   },
   {
-    "example_id": "CJ002",
-    "source_text": "...",
-    "gloss": "...",
-    "translation": "...",
-    "notes": ""
+    "entry_type": "discourse",
+    "group_id": "D001",
+    "group_name": "民间故事：猴子捞月",
+    "example_id": "D001-02",
+    "source_text": "ta˧ kan˧˥ ta˧˥ te˧ ɲia˥",
+    "gloss": "3SG see water inside moon",
+    "translation": "它看到水里的月亮",
+    "notes": "情节发展"
+  }
+]
+```
+
+#### 对话 (dialogue)
+```json
+[
+  {
+    "entry_type": "dialogue",
+    "group_id": "C001",
+    "group_name": "买菜对话",
+    "speaker": "顾客",
+    "turn_number": 1,
+    "example_id": "C001-T01",
+    "source_text": "tse˧ ko˧ to˥˧ ɕaw˧",
+    "gloss": "this CLF how.much money",
+    "translation": "这个多少钱？"
+  },
+  {
+    "entry_type": "dialogue",
+    "group_id": "C001",
+    "group_name": "买菜对话",
+    "speaker": "小贩",
+    "turn_number": 2,
+    "example_id": "C001-T02",
+    "source_text": "wu˥ kway˥",
+    "gloss": "five dollar",
+    "translation": "五块钱"
   }
 ]
 ```
@@ -205,27 +276,65 @@ python main.py
 ### CSV格式示例
 
 ```csv
-example_id,source_text,gloss,translation,notes
-CJ001,"ŋa˧ tə˥ tɕʰi˥ fan˨˩","1SG CLF eat rice","我吃饭","日常用语"
-CJ002,...,...,...,
+entry_type,example_id,source_text,gloss,translation,source_text_cn,gloss_cn,translation_cn,notes,group_id,group_name,speaker,turn_number
+sentence,S001,"ŋa˧ tə˥ tɕʰi˥ fan˨˩","1SG CLF eat rice","我吃饭","我吃饭","我 量词 吃 饭","我吃饭","日常用语",,,
+word,W001,"ŋa˧","1SG","我","我","第一人称单数","我","人称代词",,,
+discourse,D001-01,"jow˥˧ daw˥˧ gu˧˩","have INDEF monkey","有一只猴子",,,,"故事开头",D001,"民间故事：猴子捞月",,
+dialogue,C001-T01,"tse˧ ko˧ to˥˧ ɕaw˧","this CLF how.much money","这个多少钱？",,,,D001,"买菜对话","顾客",1
 ```
+
+### 字段说明
+
+| 字段 | 必填 | 说明 | 适用类型 |
+|------|------|------|----------|
+| `entry_type` | 是 | 数据类型：word/sentence/discourse/dialogue | 全部 |
+| `example_id` | 推荐 | 例句编号（如 S001） | 全部 |
+| `source_text` | 是 | 原文（IPA或原始文字） | 全部 |
+| `gloss` | 是 | 词汇分解/语法标注 | 全部 |
+| `translation` | 是 | 翻译 | 全部 |
+| `source_text_cn` | 否 | 原文汉字 | 全部 |
+| `gloss_cn` | 否 | 词汇分解汉字 | 全部 |
+| `translation_cn` | 否 | 翻译汉字 | 全部 |
+| `notes` | 否 | 备注 | 全部 |
+| `group_id` | 必填* | 语篇/对话组ID | discourse/dialogue |
+| `group_name` | 推荐* | 语篇/对话组名称 | discourse/dialogue |
+| `speaker` | 必填* | 说话人 | dialogue |
+| `turn_number` | 推荐* | 对话轮次 | dialogue |
+
+> **\*注**：语篇和对话类型必须填写 `group_id`，对话类型还必须填写 `speaker`
 
 ## 数据库结构
 
-使用SQLite数据库，表结构如下：
+使用SQLite数据库，完整表结构如下：
 
 ```sql
 CREATE TABLE corpus (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    example_id TEXT,
-    source_text TEXT,
-    gloss TEXT,
-    translation TEXT,
-    notes TEXT
+    example_id TEXT,              -- 例句编号
+    source_text TEXT,              -- 原文
+    gloss TEXT,                    -- 词汇分解/语法标注
+    translation TEXT,              -- 翻译
+    notes TEXT,                    -- 备注
+    source_text_cn TEXT,           -- 原文汉字
+    gloss_cn TEXT,                 -- 词汇分解汉字
+    translation_cn TEXT,           -- 翻译汉字
+    entry_type TEXT DEFAULT 'sentence',  -- 数据类型: word/sentence/discourse/dialogue
+    group_id TEXT,                 -- 语篇/对话组ID
+    group_name TEXT,               -- 语篇/对话组名称
+    speaker TEXT,                  -- 说话人（对话）
+    turn_number INTEGER            -- 对话轮次
 );
 ```
 
-数据库文件：`corpus.db`（自动创建在程序目录下）
+**数据库文件位置**：
+- 默认：`~/.fieldnote/corpus.db`（用户主目录）
+- 可通过"文件 > 另存为数据库"自定义位置
+
+**数据类型说明**：
+- `word`：单词条目
+- `sentence`：单句条目（默认）
+- `discourse`：语篇条目（需要 `group_id` 关联）
+- `dialogue`：对话条目（需要 `group_id` 和 `speaker`）
 
 ## 技术架构
 
