@@ -20,8 +20,32 @@ a = Analysis(
     optimize=0,
 )
 
-# 过滤掉导致崩溃的 Qt 权限插件
-a.binaries = [x for x in a.binaries if not ('qdarwinpermission' in x[0].lower() or 'locationpermission' in x[0].lower())]
+# 过滤掉导致崩溃的 Qt 权限插件和相关文件
+def filter_binaries(binaries):
+    excluded_patterns = [
+        'qdarwinpermission',
+        'locationpermission',
+        'qdarwin',  # 所有 Darwin 平台特定的权限插件
+        'permission',  # 所有权限相关插件
+    ]
+    filtered = []
+    for name, path, typecode in binaries:
+        name_lower = name.lower()
+        path_lower = path.lower() if path else ""
+        
+        # 检查是否匹配排除模式
+        should_exclude = any(
+            pattern in name_lower or pattern in path_lower 
+            for pattern in excluded_patterns
+        )
+        
+        if not should_exclude:
+            filtered.append((name, path, typecode))
+        else:
+            print(f"🚫 Excluding problematic file: {name}")
+    return filtered
+
+a.binaries = filter_binaries(a.binaries)
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -55,4 +79,14 @@ app = BUNDLE(
     name='Fieldnotes.app',
     icon=None,
     bundle_identifier='com.linguistics.fieldnote',
+    version='0.2.0',
+    info_plist={
+        'CFBundleShortVersionString': '0.2.0',
+        'CFBundleVersion': '0.2.0',
+        'CFBundleName': 'Fieldnotes',
+        'CFBundleDisplayName': 'Fieldnotes Lite',
+        'CFBundlePackageType': 'APPL',
+        'NSHighResolutionCapable': True,
+        'LSMinimumSystemVersion': '10.13.0',
+    },
 )

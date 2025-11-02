@@ -86,10 +86,28 @@ jobs:
             exit 1
           }
 
+      - name: Package for upload (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cd dist
+          tar -czf Fieldnotes-test-macOS.tar.gz Fieldnotes.app
+
+      - name: Package for upload (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cd dist
+          tar -czf Fieldnotes-test-Linux.tar.gz Fieldnotes/
+
+      - name: Package for upload (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\Fieldnotes -DestinationPath dist\Fieldnotes-test-Windows.zip
+
       - name: Upload build artifact (for inspection)
         uses: actions/upload-artifact@v4
         with:
           name: test-build-${{ matrix.os }}
-          path: dist/
+          path: dist/Fieldnotes-test-*
           retention-days: 7
 
