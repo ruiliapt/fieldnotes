@@ -795,14 +795,19 @@ class MainWindow(QMainWindow):
     
     def load_entry_to_form(self, row, column):
         """从表格加载语料到输入表单"""
-        entry_id = int(self.data_table.item(row, 0).text())
+        # 从当前Tab获取表格
+        current_widget = self.data_sub_tabs.currentWidget()
+        if not current_widget:
+            return
+        
+        data_table = current_widget.property("data_table")
+        if not data_table:
+            return
+        
+        entry_id = int(data_table.item(row, 0).text())
         entry = self.db.get_entry(entry_id)
         
         if entry:
-            # 从当前Tab获取输入框
-            current_widget = self.data_sub_tabs.currentWidget()
-            if not current_widget:
-                return
             
             example_id_input = current_widget.property("example_id_input")
             source_text_input = current_widget.property("source_text_input")
