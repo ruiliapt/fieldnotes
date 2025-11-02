@@ -1445,32 +1445,57 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "警告", f"保存字体配置失败: {str(e)}")
     
     def apply_fonts(self):
-        """应用字体设置到输入框"""
+        """应用字体设置到所有Tab的输入框"""
         # 原文字体
         source_font = self.font_config.get("source_text", "Doulos SIL Compact")
         source_size = self.font_config.get("source_text_size", 12)
-        if source_font != "系统默认":
-            self.source_text_input.setFont(QFont(source_font, source_size))
         
         # 词汇分解字体
         gloss_font = self.font_config.get("gloss", "Charis SIL Compact")
         gloss_size = self.font_config.get("gloss_size", 11)
-        if gloss_font != "系统默认":
-            self.gloss_input.setFont(QFont(gloss_font, gloss_size))
         
         # 翻译字体
         translation_font = self.font_config.get("translation", "系统默认")
         translation_size = self.font_config.get("translation_size", 11)
-        if translation_font != "系统默认":
-            self.translation_input.setFont(QFont(translation_font, translation_size))
         
         # 汉字字段字体
         chinese_font = self.font_config.get("chinese", "系统默认")
         chinese_size = self.font_config.get("chinese_size", 10)
-        if chinese_font != "系统默认":
-            self.source_text_cn_input.setFont(QFont(chinese_font, chinese_size))
-            self.gloss_cn_input.setFont(QFont(chinese_font, chinese_size))
-            self.translation_cn_input.setFont(QFont(chinese_font, chinese_size))
+        
+        # 遍历所有Tab并应用字体
+        for tab_index in range(self.data_sub_tabs.count()):
+            tab_widget = self.data_sub_tabs.widget(tab_index)
+            if not tab_widget:
+                continue
+            
+            # 获取该Tab的输入框
+            source_text_input = tab_widget.property("source_text_input")
+            source_text_cn_input = tab_widget.property("source_text_cn_input")
+            gloss_input = tab_widget.property("gloss_input")
+            gloss_cn_input = tab_widget.property("gloss_cn_input")
+            translation_input = tab_widget.property("translation_input")
+            translation_cn_input = tab_widget.property("translation_cn_input")
+            
+            # 应用原文字体
+            if source_text_input and source_font != "系统默认":
+                source_text_input.setFont(QFont(source_font, source_size))
+            
+            # 应用词汇分解字体
+            if gloss_input and gloss_font != "系统默认":
+                gloss_input.setFont(QFont(gloss_font, gloss_size))
+            
+            # 应用翻译字体
+            if translation_input and translation_font != "系统默认":
+                translation_input.setFont(QFont(translation_font, translation_size))
+            
+            # 应用汉字字段字体
+            if chinese_font != "系统默认":
+                if source_text_cn_input:
+                    source_text_cn_input.setFont(QFont(chinese_font, chinese_size))
+                if gloss_cn_input:
+                    gloss_cn_input.setFont(QFont(chinese_font, chinese_size))
+                if translation_cn_input:
+                    translation_cn_input.setFont(QFont(chinese_font, chinese_size))
     
     def open_font_settings(self):
         """打开字体设置对话框"""
