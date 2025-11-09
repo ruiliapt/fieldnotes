@@ -8,7 +8,8 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QLineEdit, QTextEdit, QTableWidget, QTableWidgetItem,
     QMessageBox, QFileDialog, QDialog, QFormLayout, QSpinBox,
-    QDoubleSpinBox, QCheckBox, QComboBox, QTabWidget, QGroupBox, QApplication
+    QDoubleSpinBox, QCheckBox, QComboBox, QTabWidget, QGroupBox, QApplication,
+    QMenu
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QAction, QShortcut, QKeySequence
@@ -261,6 +262,9 @@ class MainWindow(QMainWindow):
         data_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         data_table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)  # 支持多选
         data_table.cellClicked.connect(self.load_entry_to_form)
+        # 设置右键菜单
+        data_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        data_table.customContextMenuRequested.connect(self.show_table_context_menu)
         list_layout.addWidget(data_table)
         
         # 统计信息
@@ -1401,8 +1405,12 @@ class MainWindow(QMainWindow):
         show_numbering = data_show_numbering.isChecked() if data_show_numbering else True
         include_chinese = data_include_chinese.isChecked() if data_include_chinese else False
         
-        formatted_text = TextFormatter.format_entries(entries, show_numbering, 
-                                                     include_chinese=include_chinese)
+        formatted_text = TextFormatter.format_entries(
+            entries, 
+            show_numbering, 
+            include_chinese=include_chinese,
+            font_config=self.font_config
+        )
         
         # 显示在对话框中
         dialog = QDialog(self)
@@ -1507,8 +1515,12 @@ class MainWindow(QMainWindow):
         show_numbering = data_show_numbering.isChecked() if data_show_numbering else True
         include_chinese = data_include_chinese.isChecked() if data_include_chinese else False
         
-        formatted_text = TextFormatter.format_entries(entries, show_numbering, 
-                                                     include_chinese=include_chinese)
+        formatted_text = TextFormatter.format_entries(
+            entries, 
+            show_numbering, 
+            include_chinese=include_chinese,
+            font_config=self.font_config
+        )
         
         # 显示在对话框中
         dialog = QDialog(self)
@@ -1602,6 +1614,262 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "复制成功", "文本已复制到剪贴板！")
         if dialog:
             dialog.close()
+    
+    def show_table_context_menu(self, pos):
+        """显示表格右键菜单"""
+        # 获取当前Tab的表格
+        current_widget = self.data_sub_tabs.currentWidget()
+        if not current_widget:
+            return
+        
+        data_table = current_widget.property("data_table")
+        if not data_table:
+            return
+        
+        # 获取选中的行
+        selected_rows = data_table.selectionModel().selectedRows()
+        if not selected_rows:
+            return
+        
+        # 创建右键菜单
+        menu = QMenu(self)
+        
+        # 获取选中行数
+        selected_count = len(selected_rows)
+        
+        # 添加菜单项
+        # 编辑操作
+        edit_action = QAction(f"编辑 (加载到表单)", self)
+        edit_action.triggered.connect(lambda: self.load_selected_entry_from_menu(data_table, selected_rows))
+        menu.addAction(edit_action)
+        
+        menu.addSeparator()
+        
+        # 删除操作
+        delete_action = QAction(f"删除选中项 ({selected_count} 条)", self)
+        delete_action.triggered.connect(lambda: self.delete_selected_entries(data_table, selected_rows))
+        menu.addAction(delete_action)
+        
+        menu.addSeparator()
+        
+        # 导出操作
+        export_text_action = QAction(f"导出为文本 ({selected_count} 条)", self)
+        export_text_action.triggered.connect(lambda: self.export_selected_to_text(data_table, selected_rows))
+        menu.addAction(export_text_action)
+        
+        export_word_action = QAction(f"导出为Word ({selected_count} 条)", self)
+        export_word_action.triggered.connect(lambda: self.export_selected_to_word(data_table, selected_rows))
+        menu.addAction(export_word_action)
+        
+        menu.addSeparator()
+        
+        # 复制操作
+        copy_action = QAction("复制单元格内容", self)
+        copy_action.triggered.connect(lambda: self.copy_cell_content(data_table))
+        menu.addAction(copy_action)
+        
+        # 显示菜单
+        menu.exec(data_table.viewport().mapToGlobal(pos))
+    
+    def load_selected_entry_from_menu(self, data_table, selected_rows):
+        """从右键菜单加载选中的条目到表单"""
+        if not selected_rows:
+            return
+        
+        # 只加载第一个选中的行
+        first_row = selected_rows[0].row()
+        self.load_entry_to_form(first_row, 0)
+    
+    def delete_selected_entries(self, data_table, selected_rows):
+        """删除选中的多条语料"""
+        if not selected_rows:
+            return
+        
+        count = len(selected_rows)
+        
+        # 确认对话框
+        reply = QMessageBox.question(
+            self, 
+            "确认删除", 
+            f"确定要删除选中的 {count} 条语料吗？\n\n此操作不可撤销！",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                # 获取所有选中的ID
+                entry_ids = []
+                for index in selected_rows:
+                    row = index.row()
+                    entry_id = int(data_table.item(row, 0).text())
+                    entry_ids.append(entry_id)
+                
+                # 删除所有选中的条目
+                deleted_count = 0
+                for entry_id in entry_ids:
+                    if self.db.delete_entry(entry_id):
+                        deleted_count += 1
+                
+                QMessageBox.information(
+                    self, 
+                    "删除成功", 
+                    f"成功删除 {deleted_count} 条语料！"
+                )
+                
+                # 清空输入框并刷新表格
+                self.clear_inputs()
+                self.refresh_table()
+                self.statusBar().showMessage(f"删除成功: {deleted_count} 条", 3000)
+                
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"删除失败: {str(e)}")
+    
+    def export_selected_to_text(self, data_table, selected_rows):
+        """导出选中的语料为文本"""
+        if not selected_rows:
+            return
+        
+        try:
+            # 获取选中的条目
+            entries = []
+            for index in selected_rows:
+                row = index.row()
+                entry_id = int(data_table.item(row, 0).text())
+                entry = self.db.get_entry(entry_id)
+                if entry:
+                    entries.append(entry)
+            
+            if not entries:
+                QMessageBox.warning(self, "提示", "没有可导出的语料！")
+                return
+            
+            # 从当前Tab获取导出选项
+            current_widget = self.data_sub_tabs.currentWidget()
+            if not current_widget:
+                return
+            
+            data_show_numbering = current_widget.property("data_show_numbering")
+            data_include_chinese = current_widget.property("data_include_chinese")
+            
+            show_numbering = data_show_numbering.isChecked() if data_show_numbering else True
+            include_chinese = data_include_chinese.isChecked() if data_include_chinese else False
+            
+            formatted_text = TextFormatter.format_entries(
+                entries, 
+                show_numbering, 
+                include_chinese=include_chinese,
+                font_config=self.font_config
+            )
+            
+            # 显示在对话框中
+            dialog = QDialog(self)
+            dialog.setWindowTitle(f"导出文本 ({len(entries)} 条)")
+            dialog.setMinimumSize(800, 600)
+            
+            layout = QVBoxLayout()
+            dialog.setLayout(layout)
+            
+            text_edit = QTextEdit()
+            text_edit.setPlainText(formatted_text)
+            text_edit.setReadOnly(True)
+            for font_name in ["Consolas", "Monaco", "Menlo", "DejaVu Sans Mono", "Courier New", "monospace"]:
+                font = QFont(font_name, 11)
+                font.setStyleHint(QFont.StyleHint.Monospace)
+                font.setFixedPitch(True)
+                text_edit.setFont(font)
+                if QFont(font_name).exactMatch():
+                    break
+            layout.addWidget(text_edit)
+            
+            button_layout = QHBoxLayout()
+            copy_btn = QPushButton("复制到剪贴板")
+            copy_btn.clicked.connect(lambda: self._copy_to_clipboard(formatted_text, dialog))
+            button_layout.addWidget(copy_btn)
+            
+            close_btn = QPushButton("关闭")
+            close_btn.clicked.connect(dialog.close)
+            button_layout.addWidget(close_btn)
+            
+            layout.addLayout(button_layout)
+            dialog.exec()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"导出失败: {str(e)}")
+    
+    def export_selected_to_word(self, data_table, selected_rows):
+        """导出选中的语料到Word"""
+        if not selected_rows:
+            return
+        
+        try:
+            # 获取选中的条目
+            entries = []
+            for index in selected_rows:
+                row = index.row()
+                entry_id = int(data_table.item(row, 0).text())
+                entry = self.db.get_entry(entry_id)
+                if entry:
+                    entries.append(entry)
+            
+            if not entries:
+                QMessageBox.warning(self, "提示", "没有可导出的语料！")
+                return
+            
+            # 选择保存路径
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "保存Word文档", "", "Word Documents (*.docx)"
+            )
+            
+            if not file_path:
+                return
+            
+            # 从当前Tab获取导出选项
+            current_widget = self.data_sub_tabs.currentWidget()
+            if not current_widget:
+                return
+            
+            data_show_numbering = current_widget.property("data_show_numbering")
+            data_include_chinese = current_widget.property("data_include_chinese")
+            
+            show_numbering = data_show_numbering.isChecked() if data_show_numbering else True
+            include_chinese = data_include_chinese.isChecked() if data_include_chinese else False
+            
+            # 导出
+            success = self.exporter.export(
+                entries, file_path,
+                table_width=5.0,
+                font_size=10,
+                line_spacing=1.15,
+                show_numbering=show_numbering,
+                entries_per_page=10,
+                include_chinese=include_chinese,
+                font_config=self.font_config
+            )
+            
+            if success:
+                QMessageBox.information(
+                    self, 
+                    "导出成功", 
+                    f"成功导出 {len(entries)} 条语料到:\n{file_path}"
+                )
+                self.statusBar().showMessage(f"导出成功: {len(entries)} 条", 3000)
+            else:
+                QMessageBox.critical(self, "导出失败", "导出过程中发生错误！")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"导出失败: {str(e)}")
+    
+    def copy_cell_content(self, data_table):
+        """复制选中单元格的内容"""
+        try:
+            current_item = data_table.currentItem()
+            if current_item:
+                text = current_item.text()
+                clipboard = QApplication.clipboard()
+                clipboard.setText(text)
+                self.statusBar().showMessage("已复制单元格内容", 2000)
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"复制失败: {str(e)}")
     
     def load_font_config(self):
         """加载字体配置"""
@@ -1941,7 +2209,7 @@ class FontSettingsDialog(QDialog):
         combo = QComboBox()
         combo.setEditable(True)  # 允许输入自定义字体名
         
-        # 添加常用语言学字体
+        # 添加常用语言学字体和中文字体
         fonts = [
             "系统默认",
             "Doulos SIL Compact",
@@ -1954,7 +2222,17 @@ class FontSettingsDialog(QDialog):
             "Arial Unicode MS",
             "Lucida Sans Unicode",
             "Times New Roman",
-            "Courier New"
+            "Courier New",
+            "宋体",
+            "Songti SC",
+            "SimSun",
+            "黑体",
+            "Heiti SC",
+            "SimHei",
+            "楷体",
+            "Kaiti SC",
+            "微软雅黑",
+            "Microsoft YaHei"
         ]
         
         combo.addItems(fonts)

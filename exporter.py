@@ -293,7 +293,7 @@ class WordExporter:
         """初始化导出器"""
         self.doc = Document()
     
-    def _set_cell_properties(self, cell, font_size, is_content_cell=True, font_name=None):
+    def _set_cell_properties(self, cell, font_size, is_content_cell=True, font_name=None, fixed_width=None, min_width=None):
         """设置单元格的XML属性和段落格式
         
         Args:
@@ -301,18 +301,39 @@ class WordExporter:
             font_size: 字体大小
             is_content_cell: 是否是内容单元格（有文字的），空单元格不设置字体
             font_name: 字体名称（可选）
+            fixed_width: 固定宽度（twips），如果为None则自适应
+            min_width: 最小宽度（dxa），用于确保单元格足够宽
         """
         tc = cell._tc
         tcPr = tc.get_or_add_tcPr()
         tcW = OxmlElement('w:tcW')
-        tcW.set(qn('w:w'), '0')
-        tcW.set(qn('w:type'), 'auto')
+        if fixed_width:
+            tcW.set(qn('w:w'), str(fixed_width))
+            tcW.set(qn('w:type'), 'dxa')
+        elif min_width:
+            tcW.set(qn('w:w'), str(min_width))
+            tcW.set(qn('w:type'), 'dxa')
+        else:
+            tcW.set(qn('w:w'), '0')
+            tcW.set(qn('w:type'), 'auto')
         tcPr.append(tcW)
         vAlign = OxmlElement('w:vAlign')
         vAlign.set(qn('w:val'), 'top')
         tcPr.append(vAlign)
+        
+        # 设置单元格不换行，防止单词内部被拆分
+        noWrap = OxmlElement('w:noWrap')
+        tcPr.append(noWrap)
+        
         tcMar = OxmlElement('w:tcMar')
-        for side in ['top', 'bottom', 'left', 'right']:
+        # 左右边距设置为0.19cm (108 dxa)
+        for side in ['left', 'right']:
+            margin = OxmlElement(f'w:{side}')
+            margin.set(qn('w:w'), '108')  # 0.19cm = 108 dxa
+            margin.set(qn('w:type'), 'dxa')
+            tcMar.append(margin)
+        # 上下边距保持为0
+        for side in ['top', 'bottom']:
             margin = OxmlElement(f'w:{side}')
             margin.set(qn('w:w'), '0')
             margin.set(qn('w:type'), 'dxa')
@@ -324,18 +345,137 @@ class WordExporter:
             paragraph.paragraph_format.space_before = Pt(0)
             paragraph.paragraph_format.space_after = Pt(0)
             paragraph.paragraph_format.line_spacing = 1.0
+            
+            # 段落级别禁止换行
+            pPr = paragraph._element.get_or_add_pPr()
+            keepLines = OxmlElement('w:keepLines')
+            pPr.append(keepLines)
+            
             if is_content_cell:
                 for run in paragraph.runs:
                     run.font.size = Pt(font_size)
                     if font_name and font_name != "系统默认":
                         run.font.name = font_name
     
-    def _split_words_by_width(self, words: List[str], max_width: int = 80) -> List[List[str]]:
-        """根据显示宽度自动将词分行
+    def _estimate_word_height(self, word: str, font_size: int = 10) -> int:
+        """估算词在单元格中的显示高度（twips）
+        
+        考虑因素：
+        - 基础字体大小
+        - 上标/下标字符（增加高度）
+        - 组合符号
+        
+        Args:
+            word: 单词字符串
+            font_size: 字体大小（点）
+            
+        Returns:
+            估算的高度（twips），1点 = 20 twips
+        """
+        if not word:
+            return font_size * 20
+        
+        # 基础高度（字体大小转twips）
+        base_height = font_size * 20
+        
+        # 检查是否有上标或下标
+        has_superscript = any(char in '⁰¹²³⁴⁵⁶⁷⁸⁹' for char in word)
+        has_subscript = any(char in '₀₁₂₃₄₅₆₇₈₉' for char in word)
+        
+        # 上标或下标会增加高度需求
+        if has_superscript or has_subscript:
+            base_height = int(base_height * 1.4)  # 增加40%
+        
+        # 添加上下边距空间（基于字体大小动态计算）
+        padding = int(font_size * 4)  # 上下各留字体大小的约20%空间
+        
+        return base_height + padding
+    
+    def _estimate_word_width(self, word: str) -> float:
+        """估算词在表格单元格中的显示宽度（包含边距和渲染空间）
+        
+        Args:
+            word: 单词字符串
+            
+        Returns:
+            估算的显示宽度（相对单位）
+        """
+        if not word:
+            return 0
+        
+        # 基础字符宽度
+        char_width = len(word) * 1.2
+        
+        # 考虑单元格左右边距（0.19cm * 2）和一些渲染缓冲
+        margin_buffer = 4.0
+        
+        return char_width + margin_buffer
+    
+    def _will_cause_overflow(self, current_line_words: List[str], new_word: str, font_size: int = 10) -> bool:
+        """检测添加新词后是否会导致单元格压缩或超出页宽
+        
+        策略：
+        - 估算当前行所有词加上新词的总宽度
+        - 估算每个单元格需要的最小宽度（词宽 + 边距）
+        - 计算表格需要的总宽度（包括编号列）
+        - 与页面可用宽度比较
+        
+        Args:
+            current_line_words: 当前行已有的词列表
+            new_word: 要添加的新词
+            
+        Returns:
+            True: 会导致压缩或溢出，应该换行
+            False: 可以安全添加
+        """
+        # 计算添加新词后这一行所有词的宽度
+        all_words = current_line_words + [new_word]
+        
+        # 每个词的单元格需要的宽度（词宽 + 左右边距0.19cm*2 ≈ 216 dxa）
+        # 转换为相对单位：0.19cm ≈ 108 dxa，两边 = 216 dxa ≈ 相对单位3.8
+        cell_overhead = 3.8
+        
+        total_width = sum(self._estimate_word_width(w) + cell_overhead for w in all_words)
+        
+        # 加上编号列的宽度（估算为一个词的平均宽度）
+        numbering_col_width = 10.0 if all_words else 0
+        total_width += numbering_col_width
+        
+        # 动态计算Word A4页面可用宽度（基于字体大小）
+        # Word A4可用宽度：15.9cm（21cm - 2.54cm左边距 - 2.54cm右边距）
+        # 根据字体大小计算每cm可以容纳的字符数
+        # 经验公式：10pt字体约4个字符/cm
+        chars_per_cm = 40.0 / font_size  # 字体越大，每cm字符数越少
+        total_chars = 15.9 * chars_per_cm  # 15.9cm可容纳的字符数
+        
+        # 转换为我们的相对单位（1字符 ≈ 1.2相对单位）
+        base_conversion = 1.2
+        
+        # 动态校准系数：根据字体大小调整
+        # 基准：10pt字体使用1.2的校准系数
+        # 字体越大，需要的校准系数越大（因为字符间距增加）
+        # 字体越小，校准系数越小
+        base_font_size = 10.0
+        base_calibration = 1.2
+        calibration_factor = base_calibration * (font_size / base_font_size)
+        
+        page_available_width = total_chars * base_conversion * calibration_factor
+        
+        return total_width > page_available_width
+    
+    def _split_words_by_cumulative_width(self, words: List[str], font_size: int = 10) -> List[List[str]]:
+        """完全动态分行：逐词检测是否会导致压缩或溢出
+        
+        策略：
+        - 逐个词尝试添加到当前行
+        - 检测添加后是否会导致单元格被压缩或超出页宽
+        - 如果会，则换行
+        - 完全基于实际检测，无预设值
+        - 根据字体大小动态计算页面可用宽度
         
         Args:
             words: 词列表
-            max_width: 每行最大显示宽度（等宽字体字符数）
+            font_size: 字体大小（点），用于动态计算页面容量
             
         Returns:
             分行后的词列表，每个子列表代表一行
@@ -345,23 +485,21 @@ class WordExporter:
         
         lines = []
         current_line = []
-        current_width = 0
         
         for word in words:
-            word_width = TextFormatter.calculate_display_width(word)
-            # 每个词之间留一个空格的宽度（约2个字符）
-            space_width = 2 if current_line else 0
-            
-            if current_width + space_width + word_width > max_width and current_line:
-                # 当前行放不下了，开始新行
+            # 如果当前行为空，直接添加第一个词
+            if not current_line:
+                current_line.append(word)
+            # 检测添加这个词是否会导致压缩或溢出
+            elif self._will_cause_overflow(current_line, word, font_size):
+                # 会导致问题，换行
                 lines.append(current_line)
                 current_line = [word]
-                current_width = word_width
             else:
-                # 当前行还能放下
+                # 不会导致问题，继续添加
                 current_line.append(word)
-                current_width += space_width + word_width
         
+        # 添加最后一行
         if current_line:
             lines.append(current_line)
         
@@ -447,14 +585,35 @@ class WordExporter:
                     source_words_cn = source_text_cn.split() if (include_chinese and source_text_cn) else []
                     gloss_words_cn = gloss_cn.split() if (include_chinese and gloss_cn) else []
                     
-                    # 根据显示宽度自动分行
-                    max_line_width = 80  # 每行最大显示宽度（等宽字体字符数）
-                    source_lines_list = self._split_words_by_width(source_words, max_line_width)
-                    gloss_lines_list = self._split_words_by_width(gloss_words, max_line_width)
+                    # 确保原文和词汇分解词数相同
+                    max_len = max(len(source_words), len(gloss_words))
+                    source_words = source_words + [''] * (max_len - len(source_words))
+                    gloss_words = gloss_words + [''] * (max_len - len(gloss_words))
                     
-                    # 汉字字段也进行分行（和原文/gloss保持相同的分行方式）
-                    source_cn_lines_list = self._split_words_by_width(source_words_cn, max_line_width) if source_words_cn else []
-                    gloss_cn_lines_list = self._split_words_by_width(gloss_words_cn, max_line_width) if gloss_words_cn else []
+                    # 完全动态分行：逐词累计宽度，超过阈值时自动换行
+                    # 不使用硬编码词数，完全基于实际宽度判断
+                    # 传入字体大小，动态计算页面可用宽度
+                    source_lines_list = self._split_words_by_cumulative_width(source_words, source_size)
+                    
+                    # 根据原文的分行方式，同步分gloss和汉字字段
+                    gloss_lines_list = []
+                    source_cn_lines_list = []
+                    gloss_cn_lines_list = []
+                    
+                    word_idx = 0
+                    for source_line in source_lines_list:
+                        line_len = len(source_line)
+                        
+                        # gloss按相同索引分行
+                        gloss_lines_list.append(gloss_words[word_idx:word_idx + line_len])
+                        
+                        # 汉字字段也按相同方式分行
+                        if source_words_cn and word_idx + line_len <= len(source_words_cn):
+                            source_cn_lines_list.append(source_words_cn[word_idx:word_idx + line_len])
+                        if gloss_words_cn and word_idx + line_len <= len(gloss_words_cn):
+                            gloss_cn_lines_list.append(gloss_words_cn[word_idx:word_idx + line_len])
+                        
+                        word_idx += line_len
                     
                     # 计算表格尺寸
                     source_line_count = len(source_lines_list)
@@ -469,6 +628,26 @@ class WordExporter:
                             total_rows += len(gloss_cn_lines_list)  # 词汇分解(汉字)行数与gloss相同
                         if translation_cn:
                             total_rows += 1  # 翻译(汉字)单行合并
+                    
+                    # 动态计算所有词的最大高度
+                    all_words = []
+                    all_words.extend(source_words)
+                    all_words.extend(gloss_words)
+                    if source_words_cn:
+                        all_words.extend(source_words_cn)
+                    if gloss_words_cn:
+                        all_words.extend(gloss_words_cn)
+                    
+                    # 计算每个词的高度，找到最大值
+                    max_height = 0
+                    for word in all_words:
+                        if word:  # 跳过空字符串
+                            word_height = self._estimate_word_height(word, source_size)
+                            max_height = max(max_height, word_height)
+                    
+                    # 如果没有找到有效高度，使用默认值
+                    if max_height == 0:
+                        max_height = 300  # 默认最小高度
                     
                     # 找出所有行中最长的一行（词数最多）
                     all_line_lists = [source_lines_list, gloss_lines_list]
@@ -503,15 +682,15 @@ class WordExporter:
                         tblBorders.append(border)
                     tblPr.append(tblBorders)
                     
-                    # 表格布局：自适应
+                    # 表格布局：自适应，根据内容和页面宽度自动调整
                     tblLayout = OxmlElement('w:tblLayout')
                     tblLayout.set(qn('w:type'), 'auto')
                     tblPr.append(tblLayout)
                     
-                    # 表格宽度：自适应
+                    # 表格宽度：占满页面宽度（100%）
                     tblW = OxmlElement('w:tblW')
-                    tblW.set(qn('w:w'), '0')
-                    tblW.set(qn('w:type'), 'auto')
+                    tblW.set(qn('w:w'), '5000')  # 5000 = 100%
+                    tblW.set(qn('w:type'), 'pct')  # 百分比类型
                     tblPr.append(tblW)
                     
                     # 单元格间距：0
@@ -524,7 +703,7 @@ class WordExporter:
                     tblCellMar = OxmlElement('w:tblCellMar')
                     for side in ['left', 'right']:
                         margin = OxmlElement(f'w:{side}')
-                        margin.set(qn('w:w'), '50')
+                        margin.set(qn('w:w'), '108')  # 0.19cm = 108 dxa
                         margin.set(qn('w:type'), 'dxa')
                         tblCellMar.append(margin)
                     for side in ['top', 'bottom']:
@@ -534,7 +713,7 @@ class WordExporter:
                         tblCellMar.append(margin)
                     tblPr.append(tblCellMar)
                     
-                    # 设置所有行自动调整高度
+                    # 设置所有行统一的精确行高，使用动态计算的最大高度
                     for row in table.rows:
                         tr = row._tr
                         trPr = tr.get_or_add_trPr()
@@ -542,7 +721,9 @@ class WordExporter:
                         if trHeight is not None:
                             trPr.remove(trHeight)
                         trHeight = OxmlElement('w:trHeight')
-                        trHeight.set(qn('w:hRule'), 'auto')
+                        # 使用动态计算的最大词高度，强制所有行高度完全一致
+                        trHeight.set(qn('w:val'), str(max_height))
+                        trHeight.set(qn('w:hRule'), 'exact')
                         trPr.append(trHeight)
                     
                     # 关键：清空所有行的所有单元格
@@ -554,8 +735,12 @@ class WordExporter:
                     # 追踪当前填充到哪一行
                     current_row = 0
                     
-                    # 填充原文（多行，自动换行）
-                    for line_idx, line_words in enumerate(source_lines_list):
+                    # 交错填充：原文行和词汇分解行紧挨着
+                    # 这样可以保持每个词的上下对齐关系更直观
+                    for line_idx in range(len(source_lines_list)):
+                        # 1. 填充原文行
+                        source_line_words = source_lines_list[line_idx]
+                        
                         # 第0列：第一行放编号，其他行留空
                         cell = table.rows[current_row].cells[0]
                         if line_idx == 0 and numbering_text:
@@ -566,57 +751,63 @@ class WordExporter:
                             self._set_cell_properties(cell, source_size, is_content_cell=False)
                         
                         # 第1到N列：填充这一行的词
-                        for col_idx, word in enumerate(line_words):
+                        for col_idx, word in enumerate(source_line_words):
                             cell = table.rows[current_row].cells[col_idx + 1]
                             cell.text = word
                             self._set_cell_properties(cell, source_size, is_content_cell=True, font_name=source_font)
                         
                         current_row += 1
-                    
-                    # 填充原文(汉字)（多行，自动换行，每个词一个单元格）
-                    for line_idx, line_words in enumerate(source_cn_lines_list):
-                        # 第0列：留空
-                        cell = table.rows[current_row].cells[0]
-                        cell.text = ''
-                        self._set_cell_properties(cell, chinese_size, is_content_cell=False)
                         
-                        # 第1到N列：填充这一行的汉字词
-                        for col_idx, word in enumerate(line_words):
-                            cell = table.rows[current_row].cells[col_idx + 1]
-                            cell.text = word
-                            self._set_cell_properties(cell, chinese_size, is_content_cell=True, font_name=chinese_font)
+                        # 2. 填充原文(汉字)行（如果有）
+                        if line_idx < len(source_cn_lines_list):
+                            source_cn_line_words = source_cn_lines_list[line_idx]
+                            
+                            # 第0列：留空
+                            cell = table.rows[current_row].cells[0]
+                            cell.text = ''
+                            self._set_cell_properties(cell, chinese_size, is_content_cell=False)
+                            
+                            # 第1到N列：填充这一行的汉字词
+                            for col_idx, word in enumerate(source_cn_line_words):
+                                cell = table.rows[current_row].cells[col_idx + 1]
+                                cell.text = word
+                                self._set_cell_properties(cell, chinese_size, is_content_cell=True, font_name=chinese_font)
+                            
+                            current_row += 1
                         
-                        current_row += 1
-                    
-                    # 填充gloss（多行，自动换行）
-                    for line_idx, line_words in enumerate(gloss_lines_list):
-                        # 第0列：留空
-                        cell = table.rows[current_row].cells[0]
-                        cell.text = ''
-                        self._set_cell_properties(cell, gloss_size, is_content_cell=False)
+                        # 3. 填充gloss行
+                        if line_idx < len(gloss_lines_list):
+                            gloss_line_words = gloss_lines_list[line_idx]
+                            
+                            # 第0列：留空
+                            cell = table.rows[current_row].cells[0]
+                            cell.text = ''
+                            self._set_cell_properties(cell, gloss_size, is_content_cell=False)
+                            
+                            # 第1到N列：填充这一行的gloss词
+                            for col_idx, word in enumerate(gloss_line_words):
+                                cell = table.rows[current_row].cells[col_idx + 1]
+                                cell.text = word
+                                self._set_cell_properties(cell, gloss_size, is_content_cell=True, font_name=gloss_font)
+                            
+                            current_row += 1
                         
-                        # 第1到N列：填充这一行的gloss词
-                        for col_idx, word in enumerate(line_words):
-                            cell = table.rows[current_row].cells[col_idx + 1]
-                            cell.text = word
-                            self._set_cell_properties(cell, gloss_size, is_content_cell=True, font_name=gloss_font)
-                        
-                        current_row += 1
-                    
-                    # 填充词汇分解(汉字)（多行，自动换行，每个词一个单元格）
-                    for line_idx, line_words in enumerate(gloss_cn_lines_list):
-                        # 第0列：留空
-                        cell = table.rows[current_row].cells[0]
-                        cell.text = ''
-                        self._set_cell_properties(cell, chinese_size, is_content_cell=False)
-                        
-                        # 第1到N列：填充这一行的汉字词
-                        for col_idx, word in enumerate(line_words):
-                            cell = table.rows[current_row].cells[col_idx + 1]
-                            cell.text = word
-                            self._set_cell_properties(cell, chinese_size, is_content_cell=True, font_name=chinese_font)
-                        
-                        current_row += 1
+                        # 4. 填充词汇分解(汉字)行（如果有）
+                        if line_idx < len(gloss_cn_lines_list):
+                            gloss_cn_line_words = gloss_cn_lines_list[line_idx]
+                            
+                            # 第0列：留空
+                            cell = table.rows[current_row].cells[0]
+                            cell.text = ''
+                            self._set_cell_properties(cell, chinese_size, is_content_cell=False)
+                            
+                            # 第1到N列：填充这一行的汉字词
+                            for col_idx, word in enumerate(gloss_cn_line_words):
+                                cell = table.rows[current_row].cells[col_idx + 1]
+                                cell.text = word
+                                self._set_cell_properties(cell, chinese_size, is_content_cell=True, font_name=chinese_font)
+                            
+                            current_row += 1
                     
                     # 填充翻译行（合并所有列）
                     # 第0列：留空
@@ -629,7 +820,7 @@ class WordExporter:
                         merged_cell = table.rows[current_row].cells[1]
                         for col_idx in range(2, table_cols):
                             merged_cell.merge(table.rows[current_row].cells[col_idx])
-                        merged_cell.text = f"'{translation}'"
+                        merged_cell.text = translation
                         self._set_cell_properties(merged_cell, translation_size, is_content_cell=True, font_name=translation_font)
                     
                     current_row += 1
@@ -645,7 +836,7 @@ class WordExporter:
                         merged_cell = table.rows[current_row].cells[1]
                         for col_idx in range(2, table_cols):
                             merged_cell.merge(table.rows[current_row].cells[col_idx])
-                        merged_cell.text = f"'{translation_cn}'"
+                        merged_cell.text = translation_cn
                         self._set_cell_properties(merged_cell, chinese_size, is_content_cell=True, font_name=chinese_font)
                     
                     # 汉字字段已经集成到表格中
