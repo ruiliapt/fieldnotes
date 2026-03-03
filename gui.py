@@ -510,7 +510,7 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         """初始化用户界面"""
-        self.setWindowTitle("Fieldnotes Lite v0.6.0 - 田野笔记管理工具")
+        self.setWindowTitle("Fieldnotes Lite v0.6.1 - 田野笔记管理工具")
         self.setGeometry(100, 100, 1200, 800)
 
         # 创建菜单栏
@@ -2902,7 +2902,7 @@ class AboutDialog(QDialog):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        version = QLabel("版本 0.6.0")
+        version = QLabel("版本 0.6.1")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(version)
 

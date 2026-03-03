@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from ai_backend import AIManager, AIConfig, AIProvider, AIResponse
+from ai_backend import AIManager, AIConfig, AIProvider, AIResponse, OPENAI_PRESETS
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +55,18 @@ class AISettingsDialog(QDialog):
         provider_group.setLayout(provider_layout)
 
         self.provider_combo = QComboBox()
-        self.provider_combo.addItems(["自动（优先Claude，回退Ollama）", "仅 Claude", "仅 Ollama"])
+        self.provider_combo.addItems([
+            "自动（Claude→OpenAI兼容→Ollama）",
+            "仅 Claude",
+            "仅 OpenAI兼容(含国内LLM)",
+            "仅 Ollama",
+        ])
         # 设置当前值
         provider_map = {
             AIProvider.AUTO.value: 0,
             AIProvider.CLAUDE.value: 1,
-            AIProvider.OLLAMA.value: 2,
+            AIProvider.OPENAI_COMPATIBLE.value: 2,
+            AIProvider.OLLAMA.value: 3,
         }
         self.provider_combo.setCurrentIndex(provider_map.get(self.config.provider, 0))
         provider_layout.addRow("模式:", self.provider_combo)
@@ -89,6 +95,40 @@ class AISettingsDialog(QDialog):
 
         layout.addWidget(claude_group)
 
+        # === OpenAI 兼容设置 ===
+        openai_group = QGroupBox("OpenAI 兼容设置（OpenAI / DeepSeek / 通义千问 / 智谱GLM / 百度文心）")
+        openai_layout = QFormLayout()
+        openai_group.setLayout(openai_layout)
+
+        self.openai_preset_combo = QComboBox()
+        self.openai_preset_combo.addItems(list(OPENAI_PRESETS.keys()))
+        self.openai_preset_combo.setCurrentText(self.config.openai_preset)
+        self.openai_preset_combo.currentTextChanged.connect(self._on_preset_changed)
+        openai_layout.addRow("预设:", self.openai_preset_combo)
+
+        self.openai_base_url_input = QLineEdit()
+        self.openai_base_url_input.setPlaceholderText("https://api.openai.com/v1")
+        self.openai_base_url_input.setText(self.config.openai_base_url)
+        openai_layout.addRow("API Base URL:", self.openai_base_url_input)
+
+        self.openai_key_input = QLineEdit()
+        self.openai_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.openai_key_input.setPlaceholderText("sk-...")
+        self.openai_key_input.setText(self.config.openai_api_key)
+        openai_layout.addRow("API 密钥:", self.openai_key_input)
+
+        self.openai_model_input = QLineEdit()
+        self.openai_model_input.setPlaceholderText("gpt-4o")
+        self.openai_model_input.setText(self.config.openai_model)
+        openai_layout.addRow("模型名称:", self.openai_model_input)
+
+        test_openai_btn = QPushButton("测试连接")
+        test_openai_btn.setMaximumWidth(120)
+        test_openai_btn.clicked.connect(self._test_openai)
+        openai_layout.addRow("", test_openai_btn)
+
+        layout.addWidget(openai_group)
+
         # === Ollama 设置 ===
         ollama_group = QGroupBox("Ollama 设置（离线）")
         ollama_layout = QFormLayout()
@@ -113,7 +153,7 @@ class AISettingsDialog(QDialog):
 
         # === 隐私提示 ===
         privacy_label = QLabel(
-            "注意：使用 Claude（在线模式）时，语料文本会发送到 Anthropic API。\n"
+            "注意：使用 Claude 或 OpenAI 兼容（在线模式）时，语料文本会发送到对应 API 服务器。\n"
             "如需保密，请选择「仅 Ollama」模式在本地运行。"
         )
         privacy_label.setWordWrap(True)
@@ -134,6 +174,34 @@ class AISettingsDialog(QDialog):
 
         layout.addLayout(button_layout)
 
+    def _on_preset_changed(self, preset_name: str):
+        """预设下拉变更时自动填充 base_url 和 model"""
+        preset = OPENAI_PRESETS.get(preset_name)
+        if preset:
+            self.openai_base_url_input.setText(preset["base_url"])
+            self.openai_model_input.setText(preset["default_model"])
+
+    def _test_openai(self):
+        """测试 OpenAI 兼容 API 连接"""
+        from ai_backend import OpenAICompatibleProvider
+        base_url = self.openai_base_url_input.text().strip()
+        api_key = self.openai_key_input.text().strip()
+        model = self.openai_model_input.text().strip()
+        if not base_url or not api_key:
+            QMessageBox.warning(self, "提示", "请先输入 API Base URL 和 API 密钥")
+            return
+        if not model:
+            QMessageBox.warning(self, "提示", "请先输入模型名称")
+            return
+        provider = OpenAICompatibleProvider(base_url, api_key, model, self.openai_preset_combo.currentText())
+        resp = provider.complete("You are a test assistant.", "Say OK.", temperature=0.1, max_tokens=10)
+        if resp.success:
+            QMessageBox.information(self, "连接成功",
+                f"已成功连接到 {self.openai_preset_combo.currentText()}\n"
+                f"模型: {model}\n回复: {resp.text}")
+        else:
+            QMessageBox.warning(self, "连接失败", f"API 调用失败:\n{resp.error}")
+
     def _test_ollama(self):
         """测试 Ollama 连接"""
         from ai_backend import OllamaProvider
@@ -150,12 +218,19 @@ class AISettingsDialog(QDialog):
     def get_config(self) -> AIConfig:
         """获取用户配置"""
         provider_index = self.provider_combo.currentIndex()
-        provider_values = [AIProvider.AUTO.value, AIProvider.CLAUDE.value, AIProvider.OLLAMA.value]
+        provider_values = [
+            AIProvider.AUTO.value, AIProvider.CLAUDE.value,
+            AIProvider.OPENAI_COMPATIBLE.value, AIProvider.OLLAMA.value,
+        ]
 
         config = AIConfig(
             provider=provider_values[provider_index],
             claude_api_key=self.claude_key_input.text().strip(),
             claude_model=self.claude_model_combo.currentText().strip(),
+            openai_api_key=self.openai_key_input.text().strip(),
+            openai_base_url=self.openai_base_url_input.text().strip(),
+            openai_model=self.openai_model_input.text().strip(),
+            openai_preset=self.openai_preset_combo.currentText(),
             ollama_host=self.ollama_host_input.text().strip(),
             ollama_model=self.ollama_model_input.text().strip(),
             temperature=self.config.temperature,
