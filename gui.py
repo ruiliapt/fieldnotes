@@ -294,12 +294,20 @@ class EntryTabWidget(QWidget):
         self.main_window.setup_text_edit_context_menu(self.source_text_cn_input)
         input_layout.addRow("原文(汉字):", self.source_text_cn_input)
 
-        # 词汇分解
+        # 词汇分解（带 AI 按钮）
         self.gloss_input = QTextEdit()
         self.gloss_input.setMaximumHeight(60)
         self.gloss_input.setPlaceholderText("输入词汇分解/注释")
         self.main_window.setup_text_edit_context_menu(self.gloss_input)
-        input_layout.addRow("词汇分解:", self.gloss_input)
+        gloss_row_layout = QHBoxLayout()
+        gloss_row_layout.setSpacing(4)
+        gloss_row_layout.addWidget(self.gloss_input)
+        self.ai_gloss_btn = QPushButton("AI分析")
+        self.ai_gloss_btn.setFixedWidth(60)
+        self.ai_gloss_btn.setToolTip("使用 AI 自动生成词汇分解")
+        self.ai_gloss_btn.clicked.connect(self.main_window.ai_auto_gloss)
+        gloss_row_layout.addWidget(self.ai_gloss_btn)
+        input_layout.addRow("词汇分解:", gloss_row_layout)
 
         # 词汇分解(汉字)
         self.gloss_cn_input = QTextEdit()
@@ -308,12 +316,20 @@ class EntryTabWidget(QWidget):
         self.main_window.setup_text_edit_context_menu(self.gloss_cn_input)
         input_layout.addRow("词汇分解(汉字):", self.gloss_cn_input)
 
-        # 翻译
+        # 翻译（带 AI 按钮）
         self.translation_input = QTextEdit()
         self.translation_input.setMaximumHeight(60)
         self.translation_input.setPlaceholderText("输入翻译")
         self.main_window.setup_text_edit_context_menu(self.translation_input)
-        input_layout.addRow("翻译:", self.translation_input)
+        trans_row_layout = QHBoxLayout()
+        trans_row_layout.setSpacing(4)
+        trans_row_layout.addWidget(self.translation_input)
+        self.ai_translate_btn = QPushButton("AI翻译")
+        self.ai_translate_btn.setFixedWidth(60)
+        self.ai_translate_btn.setToolTip("使用 AI 自动翻译")
+        self.ai_translate_btn.clicked.connect(self.main_window.ai_auto_translate)
+        trans_row_layout.addWidget(self.ai_translate_btn)
+        input_layout.addRow("翻译:", trans_row_layout)
 
         # 翻译(汉字)
         self.translation_cn_input = QTextEdit()
@@ -479,6 +495,11 @@ class MainWindow(QMainWindow):
         # 加载字体配置
         self.font_config = self.load_font_config()
 
+        # AI 管理器
+        self.ai_manager = None
+        self._ai_worker = None
+        self._init_ai_manager()
+
         self.init_ui()
         self.apply_theme()
         self.apply_fonts()
@@ -489,7 +510,7 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         """初始化用户界面"""
-        self.setWindowTitle("Fieldnotes Lite v0.5.1 - 田野笔记管理工具")
+        self.setWindowTitle("Fieldnotes Lite v0.6.0 - 田野笔记管理工具")
         self.setGeometry(100, 100, 1200, 800)
 
         # 创建菜单栏
@@ -1254,6 +1275,16 @@ class MainWindow(QMainWindow):
         integrity_action.triggered.connect(self.check_database_integrity)
         tools_menu.addAction(integrity_action)
 
+        tools_menu.addSeparator()
+
+        ai_gloss_action = QAction("AI词汇分解分析...", self)
+        ai_gloss_action.triggered.connect(self.ai_auto_gloss)
+        tools_menu.addAction(ai_gloss_action)
+
+        ai_translate_action = QAction("AI智能翻译...", self)
+        ai_translate_action.triggered.connect(self.ai_auto_translate)
+        tools_menu.addAction(ai_translate_action)
+
         # 设置菜单
         settings_menu = menubar.addMenu("设置")
 
@@ -1265,6 +1296,10 @@ class MainWindow(QMainWindow):
         toggle_theme_action.setShortcut("Ctrl+Shift+D")
         toggle_theme_action.triggered.connect(self.toggle_theme)
         settings_menu.addAction(toggle_theme_action)
+
+        ai_settings_action = QAction("AI设置...", self)
+        ai_settings_action.triggered.connect(self.open_ai_settings)
+        settings_menu.addAction(ai_settings_action)
 
         # 帮助菜单
         help_menu = menubar.addMenu("帮助")
@@ -2666,6 +2701,178 @@ class MainWindow(QMainWindow):
         dialog = ShortcutHelpDialog(self)
         dialog.exec()
 
+    # ===== AI 相关方法 =====
+
+    def _init_ai_manager(self):
+        """初始化 AI 管理器（失败不影响其他功能）"""
+        try:
+            from ai_backend import AIManager
+            self.ai_manager = AIManager()
+            logger.info("AI 管理器初始化成功")
+        except Exception as e:
+            logger.warning("AI 管理器初始化失败（AI 功能不可用）: %s", e)
+            self.ai_manager = None
+
+    def _ensure_ai_manager(self) -> bool:
+        """确保 AI 可用，不可用则弹窗提示"""
+        if self.ai_manager is None:
+            QMessageBox.information(
+                self, "AI 不可用",
+                "AI 功能未初始化。请确认 ai_backend 模块存在。"
+            )
+            return False
+        provider = self.ai_manager.get_provider()
+        if provider is None:
+            QMessageBox.information(
+                self, "AI 未配置",
+                "没有可用的 AI 提供者。\n\n"
+                "请前往 设置 → AI设置 配置 Claude API 密钥或启动 Ollama 服务。"
+            )
+            return False
+        return True
+
+    def ai_auto_gloss(self):
+        """AI 自动词汇分解"""
+        if not self._ensure_ai_manager():
+            return
+        tab = self._get_current_tab()
+        if tab is None:
+            return
+
+        source_text = tab.source_text_input.toPlainText().strip()
+        if not source_text:
+            QMessageBox.information(self, "提示", "请先输入原文再使用 AI 分析。")
+            return
+
+        source_text_cn = tab.source_text_cn_input.toPlainText().strip()
+
+        # 获取 few-shot 上下文
+        context_limit = self.ai_manager.config.max_context_entries
+        context_entries = self.db.get_context_entries_for_gloss(limit=context_limit)
+
+        # 构建 prompt
+        from ai_prompts import build_gloss_prompt
+        system_prompt, user_prompt = build_gloss_prompt(
+            source_text, context_entries, source_text_cn
+        )
+
+        # 禁用按钮，显示"分析中..."
+        tab.ai_gloss_btn.setEnabled(False)
+        tab.ai_gloss_btn.setText("分析中")
+        self.statusBar().showMessage("AI 词汇分解分析中...")
+
+        # 创建工作线程
+        from ai_widgets import AIWorkerThread
+        self._ai_worker = AIWorkerThread(self.ai_manager, system_prompt, user_prompt, self)
+        self._ai_worker.finished_signal.connect(
+            lambda resp: self._on_ai_gloss_result(resp, tab)
+        )
+        self._ai_worker.start()
+
+    def _on_ai_gloss_result(self, response, tab):
+        """AI 词汇分解结果回调"""
+        # 恢复按钮
+        tab.ai_gloss_btn.setEnabled(True)
+        tab.ai_gloss_btn.setText("AI分析")
+
+        if response.success:
+            existing = tab.gloss_input.toPlainText().strip()
+            if existing:
+                reply = QMessageBox.question(
+                    self, "替换确认",
+                    "词汇分解字段已有内容，是否替换为 AI 结果？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    self.statusBar().showMessage("已取消 AI 词汇分解替换")
+                    return
+            tab.gloss_input.setPlainText(response.text)
+            self.statusBar().showMessage(
+                f"AI 词汇分解完成（{response.provider_used}，"
+                f"输入 {response.tokens_input} / 输出 {response.tokens_output} tokens）"
+            )
+        else:
+            QMessageBox.warning(self, "AI 分析失败", response.error)
+            self.statusBar().showMessage("AI 词汇分解失败")
+
+    def ai_auto_translate(self):
+        """AI 自动翻译"""
+        if not self._ensure_ai_manager():
+            return
+        tab = self._get_current_tab()
+        if tab is None:
+            return
+
+        source_text = tab.source_text_input.toPlainText().strip()
+        if not source_text:
+            QMessageBox.information(self, "提示", "请先输入原文再使用 AI 翻译。")
+            return
+
+        source_text_cn = tab.source_text_cn_input.toPlainText().strip()
+        gloss = tab.gloss_input.toPlainText().strip()
+
+        # 获取 few-shot 上下文
+        context_limit = self.ai_manager.config.max_context_entries
+        context_entries = self.db.get_context_entries_for_gloss(limit=context_limit)
+
+        # 构建 prompt
+        from ai_prompts import build_translation_prompt
+        system_prompt, user_prompt = build_translation_prompt(
+            source_text, gloss, context_entries, source_text_cn
+        )
+
+        # 禁用按钮，显示"翻译中..."
+        tab.ai_translate_btn.setEnabled(False)
+        tab.ai_translate_btn.setText("翻译中")
+        self.statusBar().showMessage("AI 智能翻译中...")
+
+        # 创建工作线程
+        from ai_widgets import AIWorkerThread
+        self._ai_worker = AIWorkerThread(self.ai_manager, system_prompt, user_prompt, self)
+        self._ai_worker.finished_signal.connect(
+            lambda resp: self._on_ai_translate_result(resp, tab)
+        )
+        self._ai_worker.start()
+
+    def _on_ai_translate_result(self, response, tab):
+        """AI 翻译结果回调"""
+        # 恢复按钮
+        tab.ai_translate_btn.setEnabled(True)
+        tab.ai_translate_btn.setText("AI翻译")
+
+        if response.success:
+            existing = tab.translation_input.toPlainText().strip()
+            if existing:
+                reply = QMessageBox.question(
+                    self, "替换确认",
+                    "翻译字段已有内容，是否替换为 AI 结果？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    self.statusBar().showMessage("已取消 AI 翻译替换")
+                    return
+            tab.translation_input.setPlainText(response.text)
+            self.statusBar().showMessage(
+                f"AI 翻译完成（{response.provider_used}，"
+                f"输入 {response.tokens_input} / 输出 {response.tokens_output} tokens）"
+            )
+        else:
+            QMessageBox.warning(self, "AI 翻译失败", response.error)
+            self.statusBar().showMessage("AI 翻译失败")
+
+    def open_ai_settings(self):
+        """打开 AI 设置对话框"""
+        from ai_widgets import AISettingsDialog
+        dialog = AISettingsDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            config = dialog.get_config()
+            config.save()
+            if self.ai_manager:
+                self.ai_manager.reload_config()
+            else:
+                self._init_ai_manager()
+            self.statusBar().showMessage("AI 设置已保存")
+
     def closeEvent(self, event):
         """关闭事件处理"""
         self.save_window_state()
@@ -2695,7 +2902,7 @@ class AboutDialog(QDialog):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        version = QLabel("版本 0.5.1")
+        version = QLabel("版本 0.6.0")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(version)
 

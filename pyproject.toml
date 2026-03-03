@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fieldnotes"
-version = "0.5.1"
+version = "0.6.0"
 description = "田野笔记管理工具 - A lightweight fieldnotes management tool for linguistic fieldwork"
 authors = ["Your Name <your.email@example.com>"]
 license = "MIT"
@@ -21,6 +21,12 @@ python = ">=3.11,<3.14"
 PyQt6 = "^6.6.1"
 python-docx = "^1.1.0"
 pandas = "^2.2.0"
+
+[tool.poetry.group.ai]
+optional = true
+
+[tool.poetry.group.ai.dependencies]
+anthropic = ">=0.42.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"

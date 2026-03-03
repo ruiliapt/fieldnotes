@@ -797,6 +797,52 @@ class CorpusDatabase:
             logger.error("数据库完整性检查失败: %s", e)
             return False, f"完整性检查执行失败: {e}"
 
+    def get_context_entries_for_gloss(self, limit: int = 5) -> List[Dict]:
+        """
+        获取用于 AI few-shot 示例的高质量上下文条目
+
+        优先返回标签含「已审核」或「定稿」的条目，
+        不足则用最近更新的有 gloss 的条目补充。
+
+        Args:
+            limit: 最大返回条目数
+
+        Returns:
+            条目列表
+        """
+        results = []
+
+        # 优先：标签含「已审核」或「定稿」的高质量条目
+        self.cursor.execute("""
+            SELECT * FROM corpus
+            WHERE gloss IS NOT NULL AND gloss != ''
+              AND source_text IS NOT NULL AND source_text != ''
+              AND (tags LIKE '%已审核%' OR tags LIKE '%定稿%')
+            ORDER BY updated_at DESC
+            LIMIT ?
+        """, (limit,))
+        rows = self.cursor.fetchall()
+        results.extend(dict(row) for row in rows)
+
+        # 不足则用最近更新的有 gloss 的条目补充
+        if len(results) < limit:
+            existing_ids = {r['id'] for r in results}
+            remaining = limit - len(results)
+            self.cursor.execute("""
+                SELECT * FROM corpus
+                WHERE gloss IS NOT NULL AND gloss != ''
+                  AND source_text IS NOT NULL AND source_text != ''
+                ORDER BY updated_at DESC
+                LIMIT ?
+            """, (remaining + len(existing_ids),))
+            rows = self.cursor.fetchall()
+            for row in rows:
+                entry = dict(row)
+                if entry['id'] not in existing_ids and len(results) < limit:
+                    results.append(entry)
+
+        return results
+
     def close(self):
         """关闭数据库连接"""
         if self.connection:
