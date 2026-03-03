@@ -3,6 +3,7 @@
 """
 import sqlite3
 import os
+import difflib
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional, Tuple
 
@@ -639,6 +640,106 @@ class CorpusDatabase:
                     tag_counts[tag] = tag_counts.get(tag, 0) + 1
 
         return sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
+
+    def batch_update_tags(self, entry_ids: List[int],
+                          add_tags: List[str] = None,
+                          remove_tags: List[str] = None) -> int:
+        """
+        批量更新标签
+
+        Args:
+            entry_ids: 条目ID列表
+            add_tags: 要添加的标签列表
+            remove_tags: 要移除的标签列表
+
+        Returns:
+            更新的条目数
+        """
+        if not entry_ids:
+            return 0
+
+        updated = 0
+        now = datetime.now(timezone.utc).isoformat()
+
+        for eid in entry_ids:
+            self.cursor.execute("SELECT tags FROM corpus WHERE id = ?", (eid,))
+            row = self.cursor.fetchone()
+            if not row:
+                continue
+
+            current_tags = [t.strip() for t in (row[0] or '').split(',') if t.strip()]
+
+            if add_tags:
+                for tag in add_tags:
+                    if tag not in current_tags:
+                        current_tags.append(tag)
+
+            if remove_tags:
+                current_tags = [t for t in current_tags if t not in remove_tags]
+
+            new_tags_str = ','.join(current_tags)
+            self.cursor.execute(
+                "UPDATE corpus SET tags = ?, updated_at = ? WHERE id = ?",
+                (new_tags_str, now, eid)
+            )
+            updated += 1
+
+        self.connection.commit()
+        return updated
+
+    def find_duplicates(self, threshold: float = 1.0) -> List[List[Dict]]:
+        """
+        查找重复/相似语料
+
+        Args:
+            threshold: 匹配阈值
+                - 1.0: 精确匹配 (source_text.strip().lower() 分组)
+                - <1.0: 模糊匹配 (difflib.SequenceMatcher)
+
+        Returns:
+            重复组列表，每组是包含相似条目的列表
+        """
+        self.cursor.execute("SELECT * FROM corpus ORDER BY id")
+        rows = self.cursor.fetchall()
+        entries = [dict(row) for row in rows]
+
+        if not entries:
+            return []
+
+        if threshold >= 1.0:
+            # 精确匹配
+            groups: Dict[str, List[Dict]] = {}
+            for entry in entries:
+                key = (entry.get('source_text') or '').strip().lower()
+                if not key:
+                    continue
+                groups.setdefault(key, []).append(entry)
+            return [group for group in groups.values() if len(group) > 1]
+        else:
+            # 模糊匹配
+            used = set()
+            result = []
+            for i, a in enumerate(entries):
+                if i in used:
+                    continue
+                text_a = (a.get('source_text') or '').strip().lower()
+                if not text_a:
+                    continue
+                group = [a]
+                for j in range(i + 1, len(entries)):
+                    if j in used:
+                        continue
+                    text_b = (entries[j].get('source_text') or '').strip().lower()
+                    if not text_b:
+                        continue
+                    ratio = difflib.SequenceMatcher(None, text_a, text_b).ratio()
+                    if ratio >= threshold:
+                        group.append(entries[j])
+                        used.add(j)
+                if len(group) > 1:
+                    used.add(i)
+                    result.append(group)
+            return result
 
     def close(self):
         """关闭数据库连接"""

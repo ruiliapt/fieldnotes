@@ -4,18 +4,21 @@
 import sys
 import json
 import csv
+import difflib
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QLineEdit, QTextEdit, QTableWidget, QTableWidgetItem,
     QMessageBox, QFileDialog, QDialog, QFormLayout, QSpinBox,
     QDoubleSpinBox, QCheckBox, QComboBox, QTabWidget, QGroupBox, QApplication,
-    QMenu, QScrollArea, QProgressBar, QSizePolicy, QFrame
+    QMenu, QScrollArea, QProgressBar, QSizePolicy, QFrame, QSplitter,
+    QListWidget, QListWidgetItem
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QAction, QShortcut, QKeySequence, QBrush, QColor
 
 from database import CorpusDatabase
 from exporter import WordExporter, TextFormatter
+from theme import ThemeManager
 import os
 
 # 表格列常量
@@ -30,9 +33,6 @@ COL_TRANSLATION_CN = 7
 COL_NOTES = 8
 COL_CREATED_AT = 9
 COL_TAGS = 10
-
-# 搜索高亮颜色
-HIGHLIGHT_COLOR = QColor(255, 255, 150)
 
 
 def _get_monospace_font(size: int = 11) -> QFont:
@@ -74,10 +74,6 @@ class IPAToolbarWidget(QWidget):
 
         # 折叠按钮
         self.toggle_btn = QPushButton("▶ IPA符号")
-        self.toggle_btn.setStyleSheet(
-            "QPushButton { text-align: left; padding: 4px 8px; border: 1px solid #ccc; "
-            "background: #f5f5f5; } QPushButton:hover { background: #e0e0e0; }"
-        )
         self.toggle_btn.clicked.connect(self._toggle)
         layout.addWidget(self.toggle_btn)
 
@@ -93,17 +89,12 @@ class IPAToolbarWidget(QWidget):
             row_layout.setSpacing(2)
             label = QLabel(f"{category}:")
             label.setFixedWidth(48)
-            label.setStyleSheet("font-size: 11px; color: #666;")
             row_layout.addWidget(label)
 
             symbols = symbols_str.split()
             for symbol in symbols:
                 btn = QPushButton(symbol)
                 btn.setFixedSize(30, 26)
-                btn.setStyleSheet(
-                    "QPushButton { font-size: 13px; padding: 0; border: 1px solid #ddd; "
-                    "background: white; } QPushButton:hover { background: #e3f2fd; border-color: #2196F3; }"
-                )
                 btn.clicked.connect(lambda checked, s=symbol: self.symbol_clicked.emit(s))
                 row_layout.addWidget(btn)
 
@@ -144,11 +135,9 @@ class TagSelectorWidget(QWidget):
             row.setSpacing(4)
             cat_label = QLabel(f"{category}:")
             cat_label.setFixedWidth(40)
-            cat_label.setStyleSheet("font-size: 11px; color: #666;")
             row.addWidget(cat_label)
             for tag in tags:
                 cb = QCheckBox(tag)
-                cb.setStyleSheet("font-size: 11px;")
                 self._checkboxes[tag] = cb
                 row.addWidget(cb)
             row.addStretch()
@@ -159,11 +148,9 @@ class TagSelectorWidget(QWidget):
         custom_row.setSpacing(4)
         custom_label = QLabel("自定义:")
         custom_label.setFixedWidth(40)
-        custom_label.setStyleSheet("font-size: 11px; color: #666;")
         custom_row.addWidget(custom_label)
         self.custom_input = QLineEdit()
         self.custom_input.setPlaceholderText("输入自定义标签，逗号分隔")
-        self.custom_input.setStyleSheet("font-size: 11px;")
         custom_row.addWidget(self.custom_input)
         layout.addLayout(custom_row)
 
@@ -345,7 +332,6 @@ class EntryTabWidget(QWidget):
         # 验证标签
         self.validation_label = QLabel("")
         self.validation_label.setWordWrap(True)
-        self.validation_label.setStyleSheet("padding: 4px;")
         left_layout.addWidget(self.validation_label)
 
         # 按钮区域
@@ -394,6 +380,7 @@ class EntryTabWidget(QWidget):
         )
         self.data_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.data_table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
+        self.data_table.setAlternatingRowColors(True)
         self.data_table.cellClicked.connect(self.main_window.load_entry_to_form)
         self.data_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.data_table.customContextMenuRequested.connect(self.main_window.show_table_context_menu)
@@ -446,6 +433,16 @@ class EntryTabWidget(QWidget):
         export_all_word_btn.clicked.connect(self.main_window.quick_export_all_word)
         export_buttons_layout.addWidget(export_all_word_btn)
 
+        export_csv_btn = QPushButton("导出CSV")
+        export_csv_btn.setToolTip("将所有语料导出为CSV文件")
+        export_csv_btn.clicked.connect(self.main_window.export_to_csv)
+        export_buttons_layout.addWidget(export_csv_btn)
+
+        export_json_btn = QPushButton("导出JSON")
+        export_json_btn.setToolTip("将所有语料导出为JSON文件")
+        export_json_btn.clicked.connect(self.main_window.export_to_json)
+        export_buttons_layout.addWidget(export_json_btn)
+
         export_layout.addLayout(export_buttons_layout)
 
         right_layout.addWidget(export_group)
@@ -470,17 +467,21 @@ class MainWindow(QMainWindow):
         self.exporter = WordExporter()
         self.current_entry_id = None
 
+        # 主题管理
+        self.theme_manager = ThemeManager(self.load_theme_preference())
+
         # 加载字体配置
         self.font_config = self.load_font_config()
 
         self.init_ui()
+        self.apply_theme()
         self.apply_fonts()
         self.setup_global_shortcuts()
         self.refresh_table()
 
     def init_ui(self):
         """初始化用户界面"""
-        self.setWindowTitle("Fieldnotes Lite v0.4.0 - 田野笔记管理工具")
+        self.setWindowTitle("Fieldnotes Lite v0.5.0 - 田野笔记管理工具")
         self.setGeometry(100, 100, 1200, 800)
 
         # 创建菜单栏
@@ -703,7 +704,6 @@ class MainWindow(QMainWindow):
         for category, tags in TagSelectorWidget.PREDEFINED_TAGS.items():
             for tag in tags:
                 cb = QCheckBox(tag)
-                cb.setStyleSheet("font-size: 11px;")
                 self.search_tag_checkboxes[tag] = cb
                 tag_filter_layout.addWidget(cb)
 
@@ -718,11 +718,29 @@ class MainWindow(QMainWindow):
              "词汇分解(汉字)", "翻译", "翻译(汉字)", "备注", "创建时间", "标签"]
         )
         self.search_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.search_table.setAlternatingRowColors(True)
         layout.addWidget(self.search_table)
 
         # 搜索结果统计
         self.search_stats_label = QLabel("搜索结果: 0 条")
         layout.addWidget(self.search_stats_label)
+
+        # 搜索结果导出按钮
+        search_export_layout = QHBoxLayout()
+        search_export_csv_btn = QPushButton("导出搜索结果 (CSV)")
+        search_export_csv_btn.clicked.connect(self.export_search_results_csv)
+        search_export_layout.addWidget(search_export_csv_btn)
+
+        search_export_json_btn = QPushButton("导出搜索结果 (JSON)")
+        search_export_json_btn.clicked.connect(self.export_search_results_json)
+        search_export_layout.addWidget(search_export_json_btn)
+
+        search_export_word_btn = QPushButton("导出搜索结果 (Word)")
+        search_export_word_btn.clicked.connect(self.export_search_results_word)
+        search_export_layout.addWidget(search_export_word_btn)
+
+        search_export_layout.addStretch()
+        layout.addLayout(search_export_layout)
 
         return widget
 
@@ -783,15 +801,20 @@ class MainWindow(QMainWindow):
 
         text_export_btn = QPushButton("生成对齐文本（可复制到Word）")
         text_export_btn.clicked.connect(self.generate_formatted_text)
-        text_export_btn.setStyleSheet(
-            "QPushButton { padding: 10px; font-size: 14px; background-color: #4CAF50; color: white; }"
-        )
+        text_export_btn.setProperty('cssClass', 'accent')
         button_layout.addWidget(text_export_btn)
 
         word_export_btn = QPushButton("导出到Word文档")
         word_export_btn.clicked.connect(self.export_to_word)
-        word_export_btn.setStyleSheet("QPushButton { padding: 10px; font-size: 14px; }")
         button_layout.addWidget(word_export_btn)
+
+        csv_export_btn = QPushButton("导出CSV")
+        csv_export_btn.clicked.connect(self.export_to_csv)
+        button_layout.addWidget(csv_export_btn)
+
+        json_export_btn = QPushButton("导出JSON")
+        json_export_btn.clicked.connect(self.export_to_json)
+        button_layout.addWidget(json_export_btn)
 
         layout.addLayout(button_layout)
 
@@ -833,7 +856,10 @@ class MainWindow(QMainWindow):
         overview_group.setLayout(overview_layout)
 
         self.stats_total_label = QLabel("总计: 0 条")
-        self.stats_total_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        stats_font = self.stats_total_label.font()
+        stats_font.setPointSize(16)
+        stats_font.setBold(True)
+        self.stats_total_label.setFont(stats_font)
         overview_layout.addWidget(self.stats_total_label)
 
         # 各类型进度条
@@ -856,7 +882,6 @@ class MainWindow(QMainWindow):
             overview_layout.addLayout(row)
 
         self.stats_recent_label = QLabel("今日新增: 0条  本周: 0条")
-        self.stats_recent_label.setStyleSheet("color: #666; margin-top: 4px;")
         overview_layout.addWidget(self.stats_recent_label)
 
         self.stats_layout.addWidget(overview_group)
@@ -980,12 +1005,10 @@ class MainWindow(QMainWindow):
         warnings = self._validate_entry(tab)
         if warnings:
             tab.validation_label.setText('\n'.join(warnings))
-            tab.validation_label.setStyleSheet(
-                "padding: 4px; background: #FFF3CD; color: #856404; border: 1px solid #FFEEBA; border-radius: 4px;"
-            )
+            self._set_validation_style(tab.validation_label, True)
         else:
             tab.validation_label.setText("")
-            tab.validation_label.setStyleSheet("padding: 4px;")
+            self._set_validation_style(tab.validation_label, False)
 
         # 对于语篇和对话，检查是否选择了分组
         group_id = ""
@@ -1050,12 +1073,10 @@ class MainWindow(QMainWindow):
         warnings = self._validate_entry(tab, current_id=self.current_entry_id)
         if warnings:
             tab.validation_label.setText('\n'.join(warnings))
-            tab.validation_label.setStyleSheet(
-                "padding: 4px; background: #FFF3CD; color: #856404; border: 1px solid #FFEEBA; border-radius: 4px;"
-            )
+            self._set_validation_style(tab.validation_label, True)
         else:
             tab.validation_label.setText("")
-            tab.validation_label.setStyleSheet("padding: 4px;")
+            self._set_validation_style(tab.validation_label, False)
 
         # 对于语篇和对话，检查是否选择了分组
         group_id = ""
@@ -1140,7 +1161,7 @@ class MainWindow(QMainWindow):
         tab.notes_input.clear()
         tab.tag_selector.clear()
         tab.validation_label.setText("")
-        tab.validation_label.setStyleSheet("padding: 4px;")
+        self._set_validation_style(tab.validation_label, False)
 
         self.current_entry_id = None
 
@@ -1202,12 +1223,25 @@ class MainWindow(QMainWindow):
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
 
+        # 工具菜单
+        tools_menu = menubar.addMenu("工具")
+
+        dedup_action = QAction("去重检测...", self)
+        dedup_action.setShortcut("Ctrl+D")
+        dedup_action.triggered.connect(self.open_duplicate_detection)
+        tools_menu.addAction(dedup_action)
+
         # 设置菜单
         settings_menu = menubar.addMenu("设置")
 
         font_settings_action = QAction("字体设置...", self)
         font_settings_action.triggered.connect(self.open_font_settings)
         settings_menu.addAction(font_settings_action)
+
+        toggle_theme_action = QAction("切换深色模式", self)
+        toggle_theme_action.setShortcut("Ctrl+Shift+D")
+        toggle_theme_action.triggered.connect(self.toggle_theme)
+        settings_menu.addAction(toggle_theme_action)
 
     def update_status_bar(self):
         """更新状态栏显示当前数据库"""
@@ -1444,11 +1478,12 @@ class MainWindow(QMainWindow):
             self.search_table.setItem(row, COL_TAGS, QTableWidgetItem(tags))
 
         # 搜索结果高亮
+        highlight = self.theme_manager.get_highlight_color()
         for row in range(self.search_table.rowCount()):
             for col in range(self.search_table.columnCount()):
                 item = self.search_table.item(row, col)
                 if item and keyword.lower() in item.text().lower():
-                    item.setBackground(QBrush(HIGHLIGHT_COLOR))
+                    item.setBackground(QBrush(highlight))
 
         self.search_table.resizeColumnsToContents()
         self.search_stats_label.setText(f"搜索结果: {len(results)} 条")
@@ -1902,6 +1937,21 @@ class MainWindow(QMainWindow):
         copy_action.triggered.connect(lambda: self.copy_cell_content(data_table))
         menu.addAction(copy_action)
 
+        if selected_count > 0:
+            menu.addSeparator()
+
+            batch_add_tag_action = QAction(f"批量添加标签 ({selected_count} 条)", self)
+            batch_add_tag_action.triggered.connect(
+                lambda: self.batch_tag_operation(data_table, selected_rows, 'add')
+            )
+            menu.addAction(batch_add_tag_action)
+
+            batch_remove_tag_action = QAction(f"批量移除标签 ({selected_count} 条)", self)
+            batch_remove_tag_action.triggered.connect(
+                lambda: self.batch_tag_operation(data_table, selected_rows, 'remove')
+            )
+            menu.addAction(batch_remove_tag_action)
+
         menu.exec(data_table.viewport().mapToGlobal(pos))
 
     def load_selected_entry_from_menu(self, data_table, selected_rows):
@@ -2215,6 +2265,228 @@ class MainWindow(QMainWindow):
 
         return ''.join(small_caps_map.get(char, char) for char in text)
 
+    # ===== 主题相关方法 =====
+
+    def load_theme_preference(self) -> str:
+        """从配置文件加载主题偏好"""
+        config_path = os.path.join(os.path.expanduser("~"), ".fieldnote", "app_config.json")
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    return config.get("theme", "light")
+        except Exception:
+            pass
+        return "light"
+
+    def save_theme_preference(self):
+        """保存主题偏好到配置文件"""
+        config_path = os.path.join(os.path.expanduser("~"), ".fieldnote", "app_config.json")
+        try:
+            config = {}
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+            config["theme"] = self.theme_manager.name
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"保存主题偏好失败: {e}")
+
+    def apply_theme(self):
+        """应用当前主题到整个应用"""
+        app = QApplication.instance()
+        if app:
+            app.setStyleSheet(self.theme_manager.generate_stylesheet())
+
+    def toggle_theme(self):
+        """切换深色/浅色主题"""
+        new_theme = "dark" if self.theme_manager.name == "light" else "light"
+        self.theme_manager.set_theme(new_theme)
+        self.apply_theme()
+        self.save_theme_preference()
+        self.statusBar().showMessage(
+            f"已切换到{'深色' if new_theme == 'dark' else '浅色'}模式", 3000
+        )
+
+    def _set_validation_style(self, label: QLabel, has_warning: bool):
+        """根据主题设置验证标签样式"""
+        c = self.theme_manager.colors
+        if has_warning:
+            label.setStyleSheet(
+                f"padding: 4px; background: {c.warning_bg}; color: {c.warning_text}; "
+                f"border: 1px solid {c.warning_border}; border-radius: 4px;"
+            )
+        else:
+            label.setStyleSheet("padding: 4px;")
+
+    # ===== 批量标签操作 =====
+
+    def batch_tag_operation(self, data_table, selected_rows, mode: str):
+        """批量标签操作入口"""
+        entry_ids = []
+        for index in selected_rows:
+            row = index.row()
+            entry_ids.append(int(data_table.item(row, COL_ID).text()))
+
+        dialog = BatchTagDialog(self, mode=mode)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            tags = dialog.get_tags()
+            if not tags:
+                QMessageBox.warning(self, "提示", "请至少选择一个标签！")
+                return
+
+            if mode == 'add':
+                count = self.db.batch_update_tags(entry_ids, add_tags=tags)
+            else:
+                count = self.db.batch_update_tags(entry_ids, remove_tags=tags)
+
+            action = "添加" if mode == 'add' else "移除"
+            QMessageBox.information(self, "成功", f"已为 {count} 条语料{action}标签！")
+            self.refresh_table()
+
+    # ===== CSV/JSON 导出 =====
+
+    def export_to_csv(self):
+        """导出全部语料为CSV"""
+        entries = self._get_export_entries()
+        if not entries:
+            QMessageBox.warning(self, "提示", "没有可导出的语料！")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "导出CSV", "", "CSV Files (*.csv)"
+        )
+        if not file_path:
+            return
+
+        self._write_csv(entries, file_path)
+
+    def export_to_json(self):
+        """导出全部语料为JSON"""
+        entries = self._get_export_entries()
+        if not entries:
+            QMessageBox.warning(self, "提示", "没有可导出的语料！")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "导出JSON", "", "JSON Files (*.json)"
+        )
+        if not file_path:
+            return
+
+        self._write_json(entries, file_path)
+
+    def _write_csv(self, entries, file_path):
+        """将条目列表写入CSV文件"""
+        try:
+            fields = [
+                'id', 'example_id', 'source_text', 'source_text_cn',
+                'gloss', 'gloss_cn', 'translation', 'translation_cn',
+                'notes', 'entry_type', 'group_id', 'group_name',
+                'speaker', 'turn_number', 'created_at', 'updated_at', 'tags'
+            ]
+            with open(file_path, 'w', encoding='utf-8-sig', newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=fields, extrasaction='ignore')
+                writer.writeheader()
+                for entry in entries:
+                    writer.writerow(entry)
+            QMessageBox.information(
+                self, "导出成功",
+                f"成功导出 {len(entries)} 条语料到:\n{file_path}"
+            )
+            self.statusBar().showMessage(f"CSV导出成功: {len(entries)} 条", 3000)
+        except Exception as e:
+            QMessageBox.critical(self, "导出失败", f"错误: {str(e)}")
+
+    def _write_json(self, entries, file_path):
+        """将条目列表写入JSON文件"""
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(entries, f, ensure_ascii=False, indent=2)
+            QMessageBox.information(
+                self, "导出成功",
+                f"成功导出 {len(entries)} 条语料到:\n{file_path}"
+            )
+            self.statusBar().showMessage(f"JSON导出成功: {len(entries)} 条", 3000)
+        except Exception as e:
+            QMessageBox.critical(self, "导出失败", f"错误: {str(e)}")
+
+    # ===== 搜索结果导出 =====
+
+    def _get_search_result_entries(self) -> list:
+        """获取搜索结果中的所有条目"""
+        entries = []
+        for row in range(self.search_table.rowCount()):
+            item = self.search_table.item(row, COL_ID)
+            if item:
+                entry_id = int(item.text())
+                entry = self.db.get_entry(entry_id)
+                if entry:
+                    entries.append(entry)
+        return entries
+
+    def export_search_results_csv(self):
+        """导出搜索结果为CSV"""
+        entries = self._get_search_result_entries()
+        if not entries:
+            QMessageBox.warning(self, "提示", "没有搜索结果可导出！请先搜索。")
+            return
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "导出搜索结果CSV", "", "CSV Files (*.csv)"
+        )
+        if file_path:
+            self._write_csv(entries, file_path)
+
+    def export_search_results_json(self):
+        """导出搜索结果为JSON"""
+        entries = self._get_search_result_entries()
+        if not entries:
+            QMessageBox.warning(self, "提示", "没有搜索结果可导出！请先搜索。")
+            return
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "导出搜索结果JSON", "", "JSON Files (*.json)"
+        )
+        if file_path:
+            self._write_json(entries, file_path)
+
+    def export_search_results_word(self):
+        """导出搜索结果为Word"""
+        entries = self._get_search_result_entries()
+        if not entries:
+            QMessageBox.warning(self, "提示", "没有搜索结果可导出！请先搜索。")
+            return
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "导出搜索结果Word", "", "Word Documents (*.docx)"
+        )
+        if not file_path:
+            return
+        try:
+            success = self.exporter.export(
+                entries, file_path,
+                table_width=5.0, font_size=10, line_spacing=1.15,
+                show_numbering=True, entries_per_page=10,
+                include_chinese=False, font_config=self.font_config
+            )
+            if success:
+                QMessageBox.information(
+                    self, "导出成功",
+                    f"成功导出 {len(entries)} 条搜索结果到:\n{file_path}"
+                )
+            else:
+                QMessageBox.critical(self, "导出失败", "导出过程中发生错误！")
+        except Exception as e:
+            QMessageBox.critical(self, "导出失败", f"错误: {str(e)}")
+
+    # ===== 去重检测 =====
+
+    def open_duplicate_detection(self):
+        """打开去重检测对话框"""
+        dialog = DuplicateDetectionDialog(self, self.db, self.theme_manager)
+        dialog.exec()
+        self.refresh_table()
+
     def closeEvent(self, event):
         """关闭事件处理"""
         self.db.close()
@@ -2402,3 +2674,243 @@ class FontSettingsDialog(QDialog):
             "chinese": self.chinese_font_combo.currentText(),
             "chinese_size": self.chinese_size_spin.value()
         }
+
+
+class BatchTagDialog(QDialog):
+    """批量标签操作对话框"""
+
+    def __init__(self, parent, mode: str = 'add'):
+        super().__init__(parent)
+        self.mode = mode
+        self.setWindowTitle("批量添加标签" if mode == 'add' else "批量移除标签")
+        self.setMinimumWidth(400)
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        hint = "选择要添加的标签：" if self.mode == 'add' else "选择要移除的标签："
+        layout.addWidget(QLabel(hint))
+
+        self.tag_selector = TagSelectorWidget()
+        layout.addWidget(self.tag_selector)
+
+        button_layout = QHBoxLayout()
+        ok_btn = QPushButton("确定")
+        ok_btn.clicked.connect(self.accept)
+        button_layout.addWidget(ok_btn)
+
+        cancel_btn = QPushButton("取消")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+
+        layout.addLayout(button_layout)
+
+    def get_tags(self) -> list:
+        return self.tag_selector.get_tags()
+
+
+class DuplicateDetectionDialog(QDialog):
+    """语料去重检测对话框"""
+
+    def __init__(self, parent, db, theme_manager):
+        super().__init__(parent)
+        self.db = db
+        self.theme_manager = theme_manager
+        self._groups = []
+        self.setWindowTitle("去重检测")
+        self.setMinimumSize(1000, 650)
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        # 上方：控制区
+        control_layout = QHBoxLayout()
+        control_layout.addWidget(QLabel("匹配模式:"))
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItems(["完全相同", "相似>90%", "相似>80%"])
+        control_layout.addWidget(self.mode_combo)
+
+        detect_btn = QPushButton("开始检测")
+        detect_btn.clicked.connect(self._run_detection)
+        control_layout.addWidget(detect_btn)
+        control_layout.addStretch()
+        layout.addLayout(control_layout)
+
+        # 主体：左右分栏
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+
+        # 左侧：重复组列表
+        self.group_list = QListWidget()
+        self.group_list.currentRowChanged.connect(self._on_group_selected)
+        splitter.addWidget(self.group_list)
+
+        # 右侧
+        right_widget = QWidget()
+        right_layout = QVBoxLayout()
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_widget.setLayout(right_layout)
+
+        # 组内条目表格
+        self.detail_table = QTableWidget()
+        self.detail_table.setColumnCount(7)
+        self.detail_table.setHorizontalHeaderLabels(
+            ["ID", "例句编号", "原文", "翻译", "标签", "创建时间", ""]
+        )
+        self.detail_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.detail_table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
+        self.detail_table.setAlternatingRowColors(True)
+        self.detail_table.itemSelectionChanged.connect(self._on_detail_selection_changed)
+        right_layout.addWidget(self.detail_table)
+
+        # 差异对比区
+        diff_group = QGroupBox("差异对比（选择两条记录）")
+        diff_layout = QVBoxLayout()
+        diff_group.setLayout(diff_layout)
+        self.diff_display = QTextEdit()
+        self.diff_display.setReadOnly(True)
+        self.diff_display.setFont(_get_monospace_font(10))
+        self.diff_display.setMaximumHeight(180)
+        diff_layout.addWidget(self.diff_display)
+        right_layout.addWidget(diff_group)
+
+        splitter.addWidget(right_widget)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 3)
+        layout.addWidget(splitter)
+
+        # 底部按钮
+        bottom_layout = QHBoxLayout()
+        self.delete_btn = QPushButton("删除选中的重复条目")
+        self.delete_btn.clicked.connect(self._delete_selected)
+        bottom_layout.addWidget(self.delete_btn)
+        bottom_layout.addStretch()
+
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(self.close)
+        bottom_layout.addWidget(close_btn)
+        layout.addLayout(bottom_layout)
+
+    def _run_detection(self):
+        """执行检测"""
+        mode_map = {"完全相同": 1.0, "相似>90%": 0.9, "相似>80%": 0.8}
+        threshold = mode_map[self.mode_combo.currentText()]
+
+        self._groups = self.db.find_duplicates(threshold)
+        self.group_list.clear()
+        self.detail_table.setRowCount(0)
+        self.diff_display.clear()
+
+        if not self._groups:
+            self.group_list.addItem("未发现重复项")
+            return
+
+        for i, group in enumerate(self._groups):
+            preview = (group[0].get('source_text') or '')[:30]
+            item_text = f"组{i+1}: {preview}... ({len(group)}条)"
+            self.group_list.addItem(item_text)
+
+    def _on_group_selected(self, index):
+        """选择重复组时显示组内条目"""
+        if index < 0 or index >= len(self._groups):
+            self.detail_table.setRowCount(0)
+            return
+
+        group = self._groups[index]
+        self.detail_table.setRowCount(len(group))
+
+        for row, entry in enumerate(group):
+            self.detail_table.setItem(row, 0, QTableWidgetItem(str(entry.get('id', ''))))
+            self.detail_table.setItem(row, 1, QTableWidgetItem(entry.get('example_id', '') or ''))
+            self.detail_table.setItem(row, 2, QTableWidgetItem(entry.get('source_text', '') or ''))
+            self.detail_table.setItem(row, 3, QTableWidgetItem(entry.get('translation', '') or ''))
+            self.detail_table.setItem(row, 4, QTableWidgetItem(entry.get('tags', '') or ''))
+            created_at = entry.get('created_at', '') or ''
+            if created_at and 'T' in created_at:
+                created_at = created_at[:16].replace('T', ' ')
+            self.detail_table.setItem(row, 5, QTableWidgetItem(created_at))
+
+        self.detail_table.resizeColumnsToContents()
+        self.diff_display.clear()
+
+    def _on_detail_selection_changed(self):
+        """选中两条时自动显示差异"""
+        selected = self.detail_table.selectionModel().selectedRows()
+        if len(selected) != 2:
+            self.diff_display.clear()
+            if len(selected) > 2:
+                self.diff_display.setPlainText("请只选择两条记录来对比差异")
+            return
+
+        group_idx = self.group_list.currentRow()
+        if group_idx < 0 or group_idx >= len(self._groups):
+            return
+
+        group = self._groups[group_idx]
+        r1, r2 = selected[0].row(), selected[1].row()
+        if r1 >= len(group) or r2 >= len(group):
+            return
+
+        entry_a, entry_b = group[r1], group[r2]
+
+        lines = []
+        compare_fields = [
+            ('example_id', '例句编号'), ('source_text', '原文'),
+            ('source_text_cn', '原文(汉字)'), ('gloss', '词汇分解'),
+            ('gloss_cn', '词汇分解(汉字)'), ('translation', '翻译'),
+            ('translation_cn', '翻译(汉字)'), ('notes', '备注'),
+            ('tags', '标签'),
+        ]
+
+        for field, label in compare_fields:
+            val_a = (entry_a.get(field) or '').strip()
+            val_b = (entry_b.get(field) or '').strip()
+            if val_a == val_b:
+                lines.append(f"[=] {label}: {val_a}")
+            else:
+                lines.append(f"[!] {label}:")
+                lines.append(f"    A (ID {entry_a.get('id')}): {val_a}")
+                lines.append(f"    B (ID {entry_b.get('id')}): {val_b}")
+                # unified diff for longer fields
+                if len(val_a) > 20 or len(val_b) > 20:
+                    diff = difflib.unified_diff(
+                        val_a.splitlines(), val_b.splitlines(),
+                        lineterm='', n=0
+                    )
+                    for d in diff:
+                        if d.startswith(('---', '+++')):
+                            continue
+                        lines.append(f"    {d}")
+
+        self.diff_display.setPlainText('\n'.join(lines))
+
+    def _delete_selected(self):
+        """删除选中的重复条目"""
+        selected = self.detail_table.selectionModel().selectedRows()
+        if not selected:
+            QMessageBox.warning(self, "提示", "请先选择要删除的条目！")
+            return
+
+        count = len(selected)
+        reply = QMessageBox.question(
+            self, "确认删除",
+            f"确定要删除选中的 {count} 条语料吗？\n\n此操作不可撤销！",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            deleted = 0
+            for index in selected:
+                row = index.row()
+                item = self.detail_table.item(row, 0)
+                if item:
+                    entry_id = int(item.text())
+                    if self.db.delete_entry(entry_id):
+                        deleted += 1
+
+            QMessageBox.information(self, "删除成功", f"已删除 {deleted} 条语料！")
+            # 重新检测
+            self._run_detection()
