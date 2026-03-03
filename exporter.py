@@ -1,6 +1,8 @@
 """
 导出模块 - 负责将语料导出为各种格式
 """
+import unicodedata
+
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -21,8 +23,6 @@ class TextFormatter:
         - 英文、数字、标点：1
         - 上标数字（音调）：0.5（计为1，但多个上标算一起）
         """
-        import unicodedata
-        
         width = 0
         i = 0
         text_len = len(text)

@@ -79,10 +79,10 @@ app = BUNDLE(
     name='Fieldnotes.app',
     icon=None,
     bundle_identifier='com.linguistics.fieldnote',
-    version='0.2.0',
+    version='0.4.0',
     info_plist={
-        'CFBundleShortVersionString': '0.2.0',
-        'CFBundleVersion': '0.2.0',
+        'CFBundleShortVersionString': '0.4.0',
+        'CFBundleVersion': '0.4.0',
         'CFBundleName': 'Fieldnotes',
         'CFBundleDisplayName': 'Fieldnotes Lite',
         'CFBundlePackageType': 'APPL',
