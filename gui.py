@@ -4,7 +4,9 @@
 import sys
 import json
 import csv
+import logging
 import difflib
+from datetime import datetime
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QLineEdit, QTextEdit, QTableWidget, QTableWidgetItem,
@@ -14,12 +16,16 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont, QAction, QShortcut, QKeySequence, QBrush, QColor
+from PyQt6.QtGui import QFont, QAction, QShortcut, QKeySequence, QBrush, QColor, QTextDocument
+from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
 
 from database import CorpusDatabase
 from exporter import WordExporter, TextFormatter
 from theme import ThemeManager
 import os
+import base64
+
+logger = logging.getLogger(__name__)
 
 # 表格列常量
 COL_ID = 0
@@ -478,10 +484,12 @@ class MainWindow(QMainWindow):
         self.apply_fonts()
         self.setup_global_shortcuts()
         self.refresh_table()
+        self.restore_window_state()
+        self.auto_backup_on_startup()
 
     def init_ui(self):
         """初始化用户界面"""
-        self.setWindowTitle("Fieldnotes Lite v0.5.0 - 田野笔记管理工具")
+        self.setWindowTitle("Fieldnotes Lite v0.5.1 - 田野笔记管理工具")
         self.setGeometry(100, 100, 1200, 800)
 
         # 创建菜单栏
@@ -1216,6 +1224,17 @@ class MainWindow(QMainWindow):
         save_as_action.triggered.connect(self.save_database_as)
         file_menu.addAction(save_as_action)
 
+        backup_action = QAction("备份数据库...", self)
+        backup_action.triggered.connect(self.manual_backup)
+        file_menu.addAction(backup_action)
+
+        file_menu.addSeparator()
+
+        print_action = QAction("打印...", self)
+        print_action.setShortcut("Ctrl+P")
+        print_action.triggered.connect(self.print_current_tab)
+        file_menu.addAction(print_action)
+
         file_menu.addSeparator()
 
         quit_action = QAction("退出", self)
@@ -1231,6 +1250,10 @@ class MainWindow(QMainWindow):
         dedup_action.triggered.connect(self.open_duplicate_detection)
         tools_menu.addAction(dedup_action)
 
+        integrity_action = QAction("数据库完整性检查...", self)
+        integrity_action.triggered.connect(self.check_database_integrity)
+        tools_menu.addAction(integrity_action)
+
         # 设置菜单
         settings_menu = menubar.addMenu("设置")
 
@@ -1242,6 +1265,17 @@ class MainWindow(QMainWindow):
         toggle_theme_action.setShortcut("Ctrl+Shift+D")
         toggle_theme_action.triggered.connect(self.toggle_theme)
         settings_menu.addAction(toggle_theme_action)
+
+        # 帮助菜单
+        help_menu = menubar.addMenu("帮助")
+
+        about_action = QAction("关于 Fieldnotes Lite...", self)
+        about_action.triggered.connect(self.show_about_dialog)
+        help_menu.addAction(about_action)
+
+        shortcut_help_action = QAction("快捷键说明...", self)
+        shortcut_help_action.triggered.connect(self.show_shortcut_help)
+        help_menu.addAction(shortcut_help_action)
 
     def update_status_bar(self):
         """更新状态栏显示当前数据库"""
@@ -1520,11 +1554,13 @@ class MainWindow(QMainWindow):
                     entries = list(reader)
 
             count = self.db.import_from_list(entries)
+            logger.info("导入完成: %d 条, 来源: %s", count, file_path)
             QMessageBox.information(self, "导入成功", f"成功导入 {count} 条语料！")
             self.refresh_table()
             self.statusBar().showMessage(f"导入成功: {count} 条", 3000)
 
         except Exception as e:
+            logger.error("导入失败: %s", e)
             QMessageBox.critical(self, "导入失败", f"错误: {str(e)}")
 
     def _get_export_entries(self):
@@ -2128,7 +2164,7 @@ class MainWindow(QMainWindow):
                             config[key] = value
                     return config
         except Exception as e:
-            print(f"加载字体配置失败: {e}")
+            logger.error("加载字体配置失败: %s", e)
 
         return default_config
 
@@ -2292,7 +2328,7 @@ class MainWindow(QMainWindow):
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"保存主题偏好失败: {e}")
+            logger.error("保存主题偏好失败: %s", e)
 
     def apply_theme(self):
         """应用当前主题到整个应用"""
@@ -2487,10 +2523,257 @@ class MainWindow(QMainWindow):
         dialog.exec()
         self.refresh_table()
 
+    # ===== 窗口状态记忆 =====
+
+    def save_window_state(self):
+        """保存窗口几何状态到配置文件"""
+        config_path = os.path.join(os.path.expanduser("~"), ".fieldnote", "app_config.json")
+        try:
+            config = {}
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+            geometry_bytes = self.saveGeometry()
+            config["window_geometry"] = base64.b64encode(bytes(geometry_bytes)).decode('ascii')
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+            logger.debug("窗口状态已保存")
+        except Exception as e:
+            logger.error("保存窗口状态失败: %s", e)
+
+    def restore_window_state(self):
+        """从配置文件恢复窗口几何状态"""
+        config_path = os.path.join(os.path.expanduser("~"), ".fieldnote", "app_config.json")
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                geometry_str = config.get("window_geometry")
+                if geometry_str:
+                    from PyQt6.QtCore import QByteArray
+                    geometry_bytes = base64.b64decode(geometry_str)
+                    self.restoreGeometry(QByteArray(geometry_bytes))
+                    logger.debug("窗口状态已恢复")
+        except Exception as e:
+            logger.error("恢复窗口状态失败: %s", e)
+
+    # ===== 备份与完整性检查 =====
+
+    def manual_backup(self):
+        """手动备份数据库"""
+        try:
+            backup_path = self.db.create_backup()
+            QMessageBox.information(
+                self, "备份成功",
+                f"数据库已备份到:\n{backup_path}"
+            )
+            self.statusBar().showMessage("数据库备份完成", 3000)
+        except Exception as e:
+            logger.error("手动备份失败: %s", e)
+            QMessageBox.critical(self, "备份失败", f"备份过程中发生错误:\n{str(e)}")
+
+    def auto_backup_on_startup(self):
+        """启动时自动备份（每天最多一次）"""
+        backup_dir = os.path.join(os.path.expanduser("~"), ".fieldnote", "backups")
+        today = datetime.now().strftime("%Y%m%d")
+        # 检查今日是否已备份
+        if os.path.isdir(backup_dir):
+            import glob as glob_std
+            today_backups = glob_std.glob(os.path.join(backup_dir, f"corpus_{today}_*.db"))
+            if today_backups:
+                return  # 今日已有备份
+        try:
+            backup_path = self.db.create_backup()
+            self.statusBar().showMessage(f"自动备份完成: {os.path.basename(backup_path)}", 5000)
+            logger.info("启动自动备份完成: %s", backup_path)
+        except Exception as e:
+            logger.error("启动自动备份失败: %s", e)
+
+    def check_database_integrity(self):
+        """数据库完整性检查"""
+        is_ok, message = self.db.check_integrity()
+        if is_ok:
+            QMessageBox.information(self, "完整性检查", message)
+        else:
+            QMessageBox.warning(self, "完整性检查", message)
+
+    # ===== 打印功能 =====
+
+    def print_current_tab(self):
+        """打印当前Tab的语料"""
+        entry_type = self.get_current_entry_type()
+        entries = self.db.get_entries_by_type(entry_type)
+
+        if not entries:
+            QMessageBox.warning(self, "提示", "当前Tab没有可打印的语料！")
+            return
+
+        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+        dialog = QPrintDialog(printer, self)
+        dialog.setWindowTitle("打印语料")
+
+        if dialog.exec() == QPrintDialog.DialogCode.Accepted:
+            # 生成 HTML 表格
+            html = self._build_print_html(entries, entry_type)
+            doc = QTextDocument()
+            doc.setHtml(html)
+            doc.print_(printer)
+            logger.info("打印完成: %d 条 %s 类型语料", len(entries), entry_type)
+            self.statusBar().showMessage(f"打印完成: {len(entries)} 条", 3000)
+
+    def _build_print_html(self, entries, entry_type: str) -> str:
+        """构建打印用的 HTML 表格"""
+        type_labels = {"word": "单词", "sentence": "单句", "discourse": "语篇", "dialogue": "对话"}
+        type_label = type_labels.get(entry_type, entry_type)
+
+        rows_html = ""
+        for entry in entries:
+            rows_html += "<tr>"
+            rows_html += f"<td>{entry.get('example_id', '') or ''}</td>"
+            rows_html += f"<td>{entry.get('source_text', '') or ''}</td>"
+            rows_html += f"<td>{entry.get('gloss', '') or ''}</td>"
+            rows_html += f"<td>{entry.get('translation', '') or ''}</td>"
+            rows_html += f"<td>{entry.get('notes', '') or ''}</td>"
+            rows_html += f"<td>{entry.get('tags', '') or ''}</td>"
+            rows_html += "</tr>"
+
+        html = f"""
+        <html><head><meta charset="utf-8">
+        <style>
+            body {{ font-family: serif; font-size: 10pt; }}
+            h2 {{ text-align: center; }}
+            table {{ border-collapse: collapse; width: 100%; }}
+            th, td {{ border: 1px solid #333; padding: 4px 6px; text-align: left; font-size: 9pt; }}
+            th {{ background-color: #eee; font-weight: bold; }}
+        </style></head><body>
+        <h2>Fieldnotes Lite - {type_label}语料</h2>
+        <p>共 {len(entries)} 条 | 打印时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+        <table>
+        <tr><th>编号</th><th>原文</th><th>词汇分解</th><th>翻译</th><th>备注</th><th>标签</th></tr>
+        {rows_html}
+        </table></body></html>
+        """
+        return html
+
+    def show_about_dialog(self):
+        """显示关于对话框"""
+        dialog = AboutDialog(self)
+        dialog.exec()
+
+    def show_shortcut_help(self):
+        """显示快捷键帮助对话框"""
+        dialog = ShortcutHelpDialog(self)
+        dialog.exec()
+
     def closeEvent(self, event):
         """关闭事件处理"""
+        self.save_window_state()
         self.db.close()
         event.accept()
+
+
+class AboutDialog(QDialog):
+    """关于对话框"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("关于 Fieldnotes Lite")
+        self.setFixedSize(420, 320)
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout()
+        layout.setSpacing(12)
+        self.setLayout(layout)
+
+        title = QLabel("Fieldnotes Lite")
+        title_font = title.font()
+        title_font.setPointSize(18)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        version = QLabel("版本 0.5.1")
+        version.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(version)
+
+        desc = QLabel("田野笔记管理与导出工具\n面向语言学田野调查的语料管理软件")
+        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        layout.addSpacing(8)
+
+        info_text = (
+            "著作权人: Linguistics Research\n"
+            "开发日期: 2024-2026\n"
+            "技术栈: Python + PyQt6 + SQLite\n"
+        )
+        info = QLabel(info_text)
+        info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(info)
+
+        layout.addSpacing(8)
+
+        copyright_label = QLabel("Copyright \u00a9 2024-2026 Linguistics Research.\nAll rights reserved.")
+        copyright_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(copyright_label)
+
+        layout.addStretch()
+
+        ok_btn = QPushButton("确定")
+        ok_btn.clicked.connect(self.accept)
+        layout.addWidget(ok_btn)
+
+
+class ShortcutHelpDialog(QDialog):
+    """快捷键说明对话框"""
+
+    SHORTCUTS = [
+        ("Ctrl+N", "新建数据库"),
+        ("Ctrl+O", "打开数据库"),
+        ("Ctrl+Shift+S", "数据库另存为"),
+        ("Ctrl+P", "打印当前语料"),
+        ("Ctrl+Q", "退出程序"),
+        ("Ctrl+D", "去重检测"),
+        ("Ctrl+Shift+D", "切换深色模式"),
+        ("Ctrl+Shift+U", "选中文本转大写"),
+        ("Ctrl+Shift+L", "选中文本转小写"),
+        ("Ctrl+Shift+T", "选中文本首字母大写"),
+        ("Ctrl+Shift+C", "选中文本转小型大写"),
+    ]
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("快捷键说明")
+        self.setMinimumSize(400, 380)
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        table = QTableWidget()
+        table.setColumnCount(2)
+        table.setHorizontalHeaderLabels(["快捷键", "功能"])
+        table.setRowCount(len(self.SHORTCUTS))
+        table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.verticalHeader().setVisible(False)
+
+        for row, (key, desc) in enumerate(self.SHORTCUTS):
+            table.setItem(row, 0, QTableWidgetItem(key))
+            table.setItem(row, 1, QTableWidgetItem(desc))
+
+        table.resizeColumnsToContents()
+        table.horizontalHeader().setStretchLastSection(True)
+        layout.addWidget(table)
+
+        ok_btn = QPushButton("确定")
+        ok_btn.clicked.connect(self.accept)
+        layout.addWidget(ok_btn)
 
 
 class FontSettingsDialog(QDialog):

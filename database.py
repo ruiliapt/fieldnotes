@@ -3,9 +3,14 @@
 """
 import sqlite3
 import os
+import logging
 import difflib
+import shutil
+import glob as glob_mod
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # 当前 schema 版本
 SCHEMA_VERSION = 3
@@ -42,6 +47,7 @@ class CorpusDatabase:
         self.connection = sqlite3.connect(self.db_path)
         self.connection.row_factory = sqlite3.Row  # 使结果可以通过列名访问
         self.cursor = self.connection.cursor()
+        logger.info("数据库已连接: %s", self.db_path)
 
     def _create_table(self):
         """创建语料表（如果不存在）"""
@@ -124,8 +130,9 @@ class CorpusDatabase:
                     self.cursor.execute("ALTER TABLE corpus ADD COLUMN tags TEXT DEFAULT ''")
 
                 self._set_schema_version(SCHEMA_VERSION)
+                logger.info("数据库迁移完成, 当前版本: %d", SCHEMA_VERSION)
             except Exception as e:
-                print(f"数据库迁移失败: {e}")
+                logger.error("数据库迁移失败: %s", e)
 
     def insert_entry(self, example_id: str, source_text: str, gloss: str,
                      translation: str, notes: str = "",
@@ -360,7 +367,7 @@ class CorpusDatabase:
                 )
                 count += 1
             except Exception as e:
-                print(f"导入记录失败: {e}")
+                logger.error("导入记录失败: %s", e)
                 continue
         return count
 
@@ -741,7 +748,57 @@ class CorpusDatabase:
                     result.append(group)
             return result
 
+    def create_backup(self) -> str:
+        """
+        创建数据库备份
+
+        Returns:
+            备份文件路径
+        """
+        backup_dir = os.path.join(os.path.expanduser("~"), ".fieldnote", "backups")
+        os.makedirs(backup_dir, exist_ok=True)
+
+        # 清理 30 天前的旧备份
+        cutoff = datetime.now() - timedelta(days=30)
+        for filepath in glob_mod.glob(os.path.join(backup_dir, "corpus_*.db")):
+            try:
+                mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
+                if mtime < cutoff:
+                    os.remove(filepath)
+                    logger.info("已清理旧备份: %s", filepath)
+            except OSError:
+                pass
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = os.path.join(backup_dir, f"corpus_{timestamp}.db")
+
+        shutil.copy2(self.db_path, backup_path)
+        logger.info("数据库备份已创建: %s", backup_path)
+        return backup_path
+
+    def check_integrity(self) -> tuple:
+        """
+        执行数据库完整性检查
+
+        Returns:
+            (is_ok: bool, message: str)
+        """
+        try:
+            self.cursor.execute("PRAGMA integrity_check")
+            result = self.cursor.fetchone()
+            if result and result[0] == "ok":
+                logger.info("数据库完整性检查通过")
+                return True, "数据库完整性检查通过，数据库状态正常。"
+            else:
+                msg = result[0] if result else "未知错误"
+                logger.warning("数据库完整性检查异常: %s", msg)
+                return False, f"数据库完整性检查发现问题:\n{msg}"
+        except Exception as e:
+            logger.error("数据库完整性检查失败: %s", e)
+            return False, f"完整性检查执行失败: {e}"
+
     def close(self):
         """关闭数据库连接"""
         if self.connection:
             self.connection.close()
+            logger.info("数据库已关闭: %s", self.db_path)

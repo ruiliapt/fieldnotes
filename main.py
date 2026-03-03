@@ -23,11 +23,15 @@ if getattr(sys, 'frozen', False):
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import QLockFile, QDir
+from logger import setup_logger
 from gui import MainWindow
 
 
 def main():
     """主函数"""
+    # 初始化日志系统
+    setup_logger()
+
     app = QApplication(sys.argv)
     app.setApplicationName("Fieldnotes Lite")
     app.setOrganizationName("Linguistics Research")
