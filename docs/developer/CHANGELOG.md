@@ -6,6 +6,71 @@
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-03-04
+
+### Added
+- **OpenAI 兼容层**：新增 `OpenAICompatibleProvider`，统一接入 OpenAI / DeepSeek / 通义千问 / 智谱GLM / 百度文心
+- AI 设置增强：预设下拉、Base URL、API Key、模型名称、测试连接
+- 自动模式优先级：Claude → OpenAI Compatible → Ollama
+
+## [0.6.0] - 2026-03-04
+
+### Added
+- **混合模式 AI 集成**：AI 后端抽象层 (`ai_backend.py`)、提示词模板 (`ai_prompts.py`)、界面组件 (`ai_widgets.py`)
+- AI 词汇分解 + AI 智能翻译
+- Few-shot 上下文自动查询
+- 支持 Claude API 和 Ollama 本地模型
+
+## [0.5.1] - 2026-03-04
+
+### Added
+- 日志系统 (`logger.py`)：RotatingFileHandler，30天自动清理
+- 关于对话框、快捷键说明、帮助菜单
+- 数据库自动备份 (`~/.fieldnote/backups/`) + 手动备份
+- 数据库完整性检查 (PRAGMA integrity_check)
+- 窗口状态记忆 (saveGeometry/restoreGeometry)
+- 打印功能 (Ctrl+P)
+
+## [0.5.0] - 2026-03-04
+
+### Added
+- 深色模式 (`theme.py`)：ThemeManager 全局 QSS，Ctrl+Shift+D 切换
+- 批量标签管理：BatchTagDialog + batch_update_tags()
+- CSV / JSON 导出，搜索结果一键导出
+- 语料去重检测：DuplicateDetectionDialog（精确/模糊匹配）
+
+## [0.4.0] - 2026-03-03
+
+### Added
+- IPA 音标工具栏（5分类：元音/辅音/声调/上标/变音符）
+- 数据验证（词数不匹配警告、重复ID提示）
+- 搜索高亮（匹配关键词背景高亮）
+- 标签系统（TagSelectorWidget + 标签筛选）
+- 统计面板（语料概览、高频词汇、标签分布）
+- 时间戳（created_at/updated_at 自动记录）
+
+### Changed
+- 重构：EntryTabWidget 替代 property bag，提取公共方法消除重复
+- database.py 统一 schema_version 迁移机制
+
+## [0.3.0] - 2025-11-09
+
+### Added
+- 右键菜单功能：编辑、删除、导出、复制
+- 字体设置增强：新增中文字体选项
+
+### Changed
+- Word 导出完全重构：动态换行、交错布局、单元格优化
+
+## [0.2.0] - 2025-11-02
+
+### Added
+- 四种数据类型支持：单词/单句/语篇/对话
+- 汉字字段支持、字体配置系统
+- Word 导出优化：智能自动换行、紧凑表格
+- 批量导入功能（JSON/CSV）
+- GitHub Actions 自动化构建
+
 ## [0.1.4] - 2025-11-01
 
 ### Fixed

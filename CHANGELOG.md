@@ -7,6 +7,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-03-04
+
+### Added
+- **OpenAI 兼容层**：新增 `OpenAICompatibleProvider`，统一接入所有 OpenAI `/v1/chat/completions` 兼容的 LLM 提供者
+- **多 LLM 预设**：支持 OpenAI / DeepSeek / 通义千问 (Qwen) / 智谱GLM (Zhipu) / 百度文心 (ERNIE) / 自定义
+- **AI 设置增强**：预设下拉选择、Base URL、API Key、模型名称配置、测试连接功能
+- 自动模式优先级：Claude → OpenAI Compatible → Ollama
+
+## [0.6.0] - 2026-03-04
+
+### Added
+
+#### 混合模式 AI 集成
+- **AI 后端抽象层** (`ai_backend.py`)：Strategy 模式，支持 Claude / Ollama / Auto 三种模式
+- **语言学专用 Prompt** (`ai_prompts.py`)：莱比锡标注规则 + few-shot 上下文模板
+- **AI 工作线程** (`ai_widgets.py`)：QThread 异步处理 + AI 设置对话框
+- **AI 词汇分解**：自动对语料进行词汇层面的分解分析，生成逐词注释
+- **AI 智能翻译**：利用大语言模型进行高质量学术翻译
+- **Few-shot 上下文**：自动查询已有语料作为 AI 参考上下文
+- Ollama 零额外依赖（urllib.request），anthropic SDK 可选
+
+## [0.5.1] - 2026-03-04
+
+### Added
+- **日志系统** (`logger.py`)：RotatingFileHandler，自动清理 30 天日志
+- **关于对话框**：版本 / 版权 / 技术栈信息
+- **快捷键说明**：列出全部 11 个快捷键
+- **帮助菜单**：关于 + 快捷键说明
+- **数据库自动备份**：每日启动静默备份到 `~/.fieldnote/backups/`
+- **手动备份**：文件菜单 → 备份数据库
+- **数据库完整性检查**：工具菜单 → PRAGMA integrity_check
+- **窗口状态记忆**：saveGeometry / restoreGeometry via `app_config.json`
+- **打印功能** (Ctrl+P)：QPrintDialog + QTextDocument HTML 表格
+
+### Changed
+- 全局 `print` 替换为 `logging` 模块
+
+## [0.5.0] - 2026-03-04
+
+### Added
+
+#### 深色模式
+- **ThemeManager** (`theme.py`)：深色 / 浅色主题切换，全局 QSS 覆盖
+- 设置菜单快捷键 (Ctrl+Shift+D)，主题偏好持久化到 `app_config.json`
+- 所有表格启用斑马纹 (alternatingRowColors)
+
+#### 批量标签管理
+- **BatchTagDialog**：批量添加 / 移除标签，支持右键菜单触发
+- `database.py` 新增 `batch_update_tags()` 批量增删标签
+
+#### 数据导出增强
+- CSV 导出 (utf-8-sig BOM 兼容 Excel)
+- JSON 导出 (ensure_ascii=False 支持中文)
+- 搜索结果一键导出 CSV / JSON / Word
+
+#### 语料去重
+- **DuplicateDetectionDialog**：精确 / 模糊匹配 + 差异对比 + 删除
+- `database.py` 新增 `find_duplicates()` (difflib.SequenceMatcher)
+
+### Changed
+- 移除 ~12 处 inline `setStyleSheet`，改为主题驱动
+
+## [0.4.0] - 2026-03-03
+
+### Added
+
+#### IPA 音标工具栏
+- 可折叠的 IPA 工具栏，5 个分类（元音 / 辅音 / 声调 / 上标 / 变音符）
+- 点击符号即可插入到当前输入框
+
+#### 数据验证
+- 词数不匹配警告（不阻断保存）
+- 重复 example_id 提示
+
+#### 搜索高亮
+- 匹配关键词的单元格背景高亮显示
+
+#### 标签系统
+- `TagSelectorWidget`：预设标签 + 自定义输入
+- 搜索支持标签筛选
+
+#### 统计面板
+- 语料概览、高频词汇 Top20、标签分布
+
+#### 时间戳
+- 自动记录 `created_at` / `updated_at`
+- 表格显示创建时间列
+
+### Changed
+
+#### 代码重构
+- `EntryTabWidget` 替代 property bag 反模式
+- 提取 `_get_monospace_font()` 消除 4 处重复
+- 提取 `_show_text_export_dialog()` 消除 3 处重复
+- `database.py` 统一 `schema_version` 迁移机制
+- 修复 `datetime.utcnow()` 弃用警告
+
 ## [0.3.0] - 2025-11-09
 
 ### Added

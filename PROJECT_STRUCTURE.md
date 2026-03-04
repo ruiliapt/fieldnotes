@@ -1,6 +1,6 @@
 # Fieldnotes Lite - 项目结构
 
-**最后更新**: 2025-10-20
+**最后更新**: 2026-03-04
 
 ---
 
@@ -61,10 +61,16 @@ fieldnote/
 │   ├── ONE_PAGE_GUIDE.md          # 快速指南（分发用）
 │   └── USER_GUIDE_NON_TECHNICAL.md # 详细教程（分发用）
 │
-├── main.py                         # 🚀 程序入口
+├── main.py                         # 🚀 程序入口（单实例检查）
 ├── gui.py                          # 🖼️ 图形界面模块
 ├── database.py                     # 💾 数据库模块
-├── exporter.py                     # 📄 导出模块
+├── exporter.py                     # 📄 导出模块（Word/CSV/JSON）
+├── theme.py                        # 🎨 主题管理（深色/浅色模式）
+├── ai_backend.py                   # 🤖 AI 后端抽象层（多 LLM 支持）
+├── ai_prompts.py                   # 📝 AI 提示词模板
+├── ai_widgets.py                   # 🧩 AI 界面组件
+├── logger.py                       # 📋 日志系统
+├── qt_conf_fix.py                  # 🔧 Qt 配置修复（打包用）
 │
 ├── README.md                       # 项目说明
 ├── LICENSE                         # 许可证
@@ -83,10 +89,16 @@ fieldnote/
 
 | 文件 | 说明 | 依赖关系 |
 |------|------|----------|
-| `main.py` | 程序入口，启动 GUI | 依赖 `gui.py` |
-| `gui.py` | 图形界面实现，主窗口逻辑 | 依赖 `database.py`, `exporter.py` |
-| `database.py` | 数据库操作，SQLite 封装 | 独立模块 |
-| `exporter.py` | Word 文档导出功能 | 依赖 `python-docx` |
+| `main.py` | 程序入口，单实例检查，启动 GUI | 依赖 `gui.py`, `logger.py` |
+| `gui.py` | 图形界面实现，主窗口逻辑 | 依赖 `database.py`, `exporter.py`, `theme.py`, `ai_widgets.py` |
+| `database.py` | 数据库操作，SQLite 封装，迁移机制 | 独立模块 |
+| `exporter.py` | 导出功能（Word/CSV/JSON） | 依赖 `python-docx` |
+| `theme.py` | 深色/浅色主题管理 | 独立模块 |
+| `ai_backend.py` | AI 后端抽象层，多 LLM 提供者 | 独立模块（urllib） |
+| `ai_prompts.py` | 语言学专用 AI 提示词模板 | 独立模块 |
+| `ai_widgets.py` | AI 设置对话框、工作线程 | 依赖 `ai_backend.py`, `ai_prompts.py` |
+| `logger.py` | 统一日志系统 | 独立模块 |
+| `qt_conf_fix.py` | Qt 配置文件修复（打包环境） | 独立模块 |
 
 ### 配置文件
 
@@ -318,5 +330,5 @@ make version      # 查看版本
 
 ---
 
-**项目结构说明文档** - Fieldnotes Lite v0.1.0
+**项目结构说明文档** - Fieldnotes Lite v0.6.1
 
