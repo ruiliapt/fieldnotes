@@ -100,3 +100,6 @@ releases/
 
 # Test files (keep sample data)
 test_*.docx
+
+# Copyright config (contains personal info)
+copyright-config.json
