@@ -11,7 +11,16 @@ from typing import Optional
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
+try:
+    import keyring
+    _KEYRING_AVAILABLE = True
+except ImportError:
+    keyring = None  # type: ignore[assignment]
+    _KEYRING_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
+
+KEYRING_SERVICE = "fieldnote"
 
 # 配置文件路径
 AI_CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".fieldnote", "ai_config.json")
@@ -53,7 +62,7 @@ class AIConfig:
 
     @classmethod
     def load(cls) -> 'AIConfig':
-        """从配置文件加载，不存在则返回默认值"""
+        """从配置文件加载，不存在则返回默认值。API keys 优先从 keyring 读取。"""
         defaults = asdict(cls())
         try:
             if os.path.exists(AI_CONFIG_PATH):
@@ -63,16 +72,38 @@ class AIConfig:
                 for key, val in defaults.items():
                     if key not in saved:
                         saved[key] = val
-                return cls(**{k: v for k, v in saved.items() if k in defaults})
+                filtered = {k: v for k, v in saved.items() if k in defaults}
+                # Try to retrieve API keys from keyring
+                if _KEYRING_AVAILABLE:
+                    for key_field in ("claude_api_key", "openai_api_key"):
+                        kr_val = keyring.get_password(KEYRING_SERVICE, key_field)
+                        if kr_val:
+                            filtered[key_field] = kr_val
+                        elif filtered.get(key_field):
+                            # Migration: JSON has a key but keyring doesn't yet.
+                            # Keep the JSON value; it will be migrated to keyring on next save.
+                            logger.info("将从 JSON 迁移 %s 到 keyring", key_field)
+                else:
+                    logger.warning("keyring 不可用，API keys 将以明文存储在 JSON 中")
+                return cls(**filtered)
         except Exception as e:
             logger.warning("加载 AI 配置失败，使用默认值: %s", e)
         return cls()
 
     def save(self):
-        """保存配置到文件"""
+        """保存配置到文件（API keys 存入 keyring，其余写入 JSON）"""
         os.makedirs(os.path.dirname(AI_CONFIG_PATH), exist_ok=True)
+        data = asdict(self)
+        if _KEYRING_AVAILABLE:
+            # Store API keys securely in keyring
+            for key_field in ("claude_api_key", "openai_api_key"):
+                value = data[key_field]
+                if value:
+                    keyring.set_password(KEYRING_SERVICE, key_field, value)
+                # Write empty placeholder to JSON (never store keys in plaintext)
+                data[key_field] = ""
         with open(AI_CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(asdict(self), f, indent=2, ensure_ascii=False)
+            json.dump(data, f, indent=2, ensure_ascii=False)
         logger.info("AI 配置已保存")
 
 
