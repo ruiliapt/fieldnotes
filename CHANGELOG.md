@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-03-07
+
+### Added
+- **完整测试套件**：130 个 pytest 测试覆盖所有核心模块（database, exporter, ai_backend, ai_prompts, theme, logger, GUI widgets）
+- **pytest-qt 集成**：GUI 组件（IPAToolbar, TagSelector）自动化测试
+- **数据库索引**：为 source_text, entry_type, tags, gloss, created_at 添加索引，查询性能提升
+- **API 密钥安全存储**：使用系统 keyring（macOS Keychain / Windows Credential Manager）存储 API 密钥，支持从明文 JSON 自动迁移
+- **.editorconfig**：统一编辑器配置
+
+### Changed
+- **GUI 架构重构**：gui.py 从 3,400 行拆分为 ui/ 包（Mixin 架构）
+  - `ui/widgets.py` - IPAToolbarWidget, TagSelectorWidget
+  - `ui/entry_tab_widget.py` - EntryTabWidget
+  - `ui/data_operations.py` - DataOperationsMixin (CRUD)
+  - `ui/search_manager.py` - SearchManagerMixin
+  - `ui/export_manager.py` - ExportManagerMixin
+  - `ui/ai_coordinator.py` - AICoordinatorMixin
+  - `ui/dialogs.py` - DialogsMixin
+- **find_duplicates() 优化**：精确匹配从 O(n^2) 内存算法改为 SQL GROUP BY，O(n)
+- **Exporter 常量提取**：字体大小、列宽、边距等魔法数字提取为类级别常量
+- **数据库 Schema 升级**：SCHEMA_VERSION 3 -> 4（自动迁移）
+
+### Removed
+- 过时脚本：build_executable_fixed.sh, run.bat/sh, stop.bat/sh
+- 旧版手动测试脚本（替换为 pytest 自动化测试）
+
 ## [0.6.1] - 2026-03-04
 
 ### Added
