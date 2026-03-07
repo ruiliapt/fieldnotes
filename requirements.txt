@@ -1,4 +1,9 @@
-PyQt6==6.6.1
-python-docx==1.1.0
-pandas==2.2.0
+# Core dependencies (minimal set for pip users)
+# For full dependency management, use: poetry install
+PyQt6>=6.6.1
+python-docx>=1.1.0
+pandas>=2.2.0
 
+# Optional: AI features
+# anthropic>=0.42.0
+# keyring>=25.0.0

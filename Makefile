@@ -17,11 +17,11 @@ install-dev:  ## 安装开发依赖
 run:  ## 运行程序
 	poetry run python main.py
 
-stop:  ## 停止程序
-	./scripts/stop.sh
+stop:  ## 停止程序（查找并终止运行中的 Fieldnotes 进程）
+	@pkill -f "python main.py" 2>/dev/null && echo "已停止" || echo "没有运行中的进程"
 
 test:  ## 运行测试
-	poetry run python tests/test_basic.py
+	poetry run pytest
 
 clean:  ## 清理临时文件
 	find . -type d -name "__pycache__" -exec rm -rf {} +

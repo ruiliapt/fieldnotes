@@ -193,7 +193,7 @@ gh release upload v0.1.0 \
 
 ---
 
-**完整更新日志**: [CHANGELOG.md](https://github.com/ruiliapt/fieldnotes/blob/main/docs/developer/CHANGELOG.md)
+**完整更新日志**: [CHANGELOG.md](https://github.com/ruiliapt/fieldnotes/blob/main/CHANGELOG.md)
 ```
 
 ---

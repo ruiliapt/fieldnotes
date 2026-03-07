@@ -28,8 +28,7 @@ fieldnote/
 ├── 🚀 面向发布者/维护者
 │   ├── PUBLISHING.md                      # 完整发布指南
 │   ├── RELEASE_QUICKSTART.md              # 发布命令速查
-│   ├── README_DISTRIBUTION.md             # 面向非技术用户的分发建议
-│   └── CHANGELOG.md                       # 版本更新日志
+│   └── README_DISTRIBUTION.md             # 面向非技术用户的分发建议
 │
 └── 📦 示例数据
     ├── sample_data.json                   # JSON 格式示例

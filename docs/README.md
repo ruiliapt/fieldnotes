@@ -18,7 +18,6 @@
 - [跨平台支持](developer/PLATFORM_SUPPORT.md) - 多平台开发
 - [发布指南](developer/PUBLISHING.md) - 发布流程
 - [构建总结](developer/BUILD_SUMMARY.md) - 构建文档
-- [更新日志](developer/CHANGELOG.md) - 版本历史
 - 更多...
 
 ### [使用指南](guides/)
