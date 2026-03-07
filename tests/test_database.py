@@ -390,3 +390,29 @@ class TestDatabaseMigration:
         count = tmp_db.import_from_list(sample_entries)
         assert count == len(sample_entries)
         assert tmp_db.get_count() == len(sample_entries)
+
+
+class TestDatabasePerformance:
+    """Test database performance optimizations."""
+
+    def test_indexes_exist_after_migration(self, tmp_db):
+        tmp_db.cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'"
+        )
+        indexes = [row[0] for row in tmp_db.cursor.fetchall()]
+        assert "idx_corpus_source_text" in indexes
+        assert "idx_corpus_entry_type" in indexes
+        assert "idx_corpus_tags" in indexes
+
+    def test_schema_version_is_4(self, tmp_db):
+        assert tmp_db._get_schema_version() == 4
+
+    def test_find_duplicates_exact_with_many_entries(self, tmp_db):
+        # Insert 100 entries, 50 pairs of duplicates
+        for i in range(100):
+            tmp_db.insert_entry(
+                example_id=f"E{i}", source_text=f"text{i % 50}",
+                gloss="g", translation="t"
+            )
+        dupes = tmp_db.find_duplicates(threshold=1.0)
+        assert len(dupes) == 50
