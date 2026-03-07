@@ -1,1 +1,2 @@
-"""ui 包 - 图形界面模块的拆分重构"""
+"""UI package - refactored from monolithic gui.py"""
+from gui import MainWindow
