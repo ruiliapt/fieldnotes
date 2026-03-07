@@ -288,7 +288,18 @@ class TextFormatter:
 
 class WordExporter:
     """Word文档导出类"""
-    
+
+    # Export constants
+    DEFAULT_SOURCE_FONT = "Doulos SIL Compact"
+    DEFAULT_SOURCE_SIZE = 12
+    DEFAULT_GLOSS_FONT = "Charis SIL Compact"
+    DEFAULT_GLOSS_SIZE = 11
+    DEFAULT_TRANSLATION_SIZE = 11
+    DEFAULT_CHINESE_SIZE = 10
+    CELL_MARGIN_DXA = 108  # 0.19cm in DXA units
+    TABLE_WIDTH_PCT = 5000  # 100% in Word percentage units
+    DEFAULT_ROW_HEIGHT = 300  # twips
+
     def __init__(self):
         """初始化导出器"""
         self.doc = Document()
@@ -329,7 +340,7 @@ class WordExporter:
         # 左右边距设置为0.19cm (108 dxa)
         for side in ['left', 'right']:
             margin = OxmlElement(f'w:{side}')
-            margin.set(qn('w:w'), '108')  # 0.19cm = 108 dxa
+            margin.set(qn('w:w'), str(self.CELL_MARGIN_DXA))
             margin.set(qn('w:type'), 'dxa')
             tcMar.append(margin)
         # 上下边距保持为0
@@ -537,14 +548,14 @@ class WordExporter:
                 font_config = {}
             
             # 设置默认字体配置
-            source_font = font_config.get("source_text", "Doulos SIL Compact")
-            source_size = font_config.get("source_text_size", 12)
-            gloss_font = font_config.get("gloss", "Charis SIL Compact")
-            gloss_size = font_config.get("gloss_size", 11)
+            source_font = font_config.get("source_text", self.DEFAULT_SOURCE_FONT)
+            source_size = font_config.get("source_text_size", self.DEFAULT_SOURCE_SIZE)
+            gloss_font = font_config.get("gloss", self.DEFAULT_GLOSS_FONT)
+            gloss_size = font_config.get("gloss_size", self.DEFAULT_GLOSS_SIZE)
             translation_font = font_config.get("translation", None)
-            translation_size = font_config.get("translation_size", 11)
+            translation_size = font_config.get("translation_size", self.DEFAULT_TRANSLATION_SIZE)
             chinese_font = font_config.get("chinese", None)
-            chinese_size = font_config.get("chinese_size", 10)
+            chinese_size = font_config.get("chinese_size", self.DEFAULT_CHINESE_SIZE)
             
             self.doc = Document()
             
@@ -647,7 +658,7 @@ class WordExporter:
                     
                     # 如果没有找到有效高度，使用默认值
                     if max_height == 0:
-                        max_height = 300  # 默认最小高度
+                        max_height = self.DEFAULT_ROW_HEIGHT
                     
                     # 找出所有行中最长的一行（词数最多）
                     all_line_lists = [source_lines_list, gloss_lines_list]
@@ -689,7 +700,7 @@ class WordExporter:
                     
                     # 表格宽度：占满页面宽度（100%）
                     tblW = OxmlElement('w:tblW')
-                    tblW.set(qn('w:w'), '5000')  # 5000 = 100%
+                    tblW.set(qn('w:w'), str(self.TABLE_WIDTH_PCT))
                     tblW.set(qn('w:type'), 'pct')  # 百分比类型
                     tblPr.append(tblW)
                     
@@ -703,7 +714,7 @@ class WordExporter:
                     tblCellMar = OxmlElement('w:tblCellMar')
                     for side in ['left', 'right']:
                         margin = OxmlElement(f'w:{side}')
-                        margin.set(qn('w:w'), '108')  # 0.19cm = 108 dxa
+                        margin.set(qn('w:w'), str(self.CELL_MARGIN_DXA))
                         margin.set(qn('w:type'), 'dxa')
                         tblCellMar.append(margin)
                     for side in ['top', 'bottom']:
