@@ -13,7 +13,7 @@ from typing import List, Dict, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # 当前 schema 版本
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class CorpusDatabase:
@@ -128,6 +128,14 @@ class CorpusDatabase:
                     self.cursor.execute("ALTER TABLE corpus ADD COLUMN updated_at TEXT")
                 if 'tags' not in columns:
                     self.cursor.execute("ALTER TABLE corpus ADD COLUMN tags TEXT DEFAULT ''")
+
+                # Migration 4: Add indexes for performance
+                if current < 4:
+                    self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_corpus_source_text ON corpus(source_text)")
+                    self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_corpus_entry_type ON corpus(entry_type)")
+                    self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_corpus_tags ON corpus(tags)")
+                    self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_corpus_gloss ON corpus(gloss)")
+                    self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_corpus_created_at ON corpus(created_at)")
 
                 self._set_schema_version(SCHEMA_VERSION)
                 logger.info("数据库迁移完成, 当前版本: %d", SCHEMA_VERSION)
@@ -706,23 +714,35 @@ class CorpusDatabase:
         Returns:
             重复组列表，每组是包含相似条目的列表
         """
-        self.cursor.execute("SELECT * FROM corpus ORDER BY id")
-        rows = self.cursor.fetchall()
-        entries = [dict(row) for row in rows]
-
-        if not entries:
-            return []
-
         if threshold >= 1.0:
-            # 精确匹配
-            groups: Dict[str, List[Dict]] = {}
-            for entry in entries:
-                key = (entry.get('source_text') or '').strip().lower()
-                if not key:
-                    continue
-                groups.setdefault(key, []).append(entry)
-            return [group for group in groups.values() if len(group) > 1]
+            # SQL-based exact match - O(n) instead of O(n²)
+            self.cursor.execute("""
+                SELECT LOWER(TRIM(source_text)) as normalized
+                FROM corpus
+                WHERE source_text IS NOT NULL AND source_text != ''
+                GROUP BY normalized
+                HAVING COUNT(*) > 1
+            """)
+            duplicate_keys = [row[0] for row in self.cursor.fetchall()]
+
+            result = []
+            for key in duplicate_keys:
+                self.cursor.execute(
+                    "SELECT * FROM corpus WHERE LOWER(TRIM(source_text)) = ? ORDER BY id",
+                    (key,)
+                )
+                group = [dict(r) for r in self.cursor.fetchall()]
+                if len(group) > 1:
+                    result.append(group)
+            return result
         else:
+            self.cursor.execute("SELECT * FROM corpus ORDER BY id")
+            rows = self.cursor.fetchall()
+            entries = [dict(row) for row in rows]
+
+            if not entries:
+                return []
+
             # 模糊匹配
             used = set()
             result = []

@@ -24,7 +24,7 @@ if getattr(sys, 'frozen', False):
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import QLockFile, QDir
 from logger import setup_logger
-from gui import MainWindow
+from ui import MainWindow
 
 
 def main():
