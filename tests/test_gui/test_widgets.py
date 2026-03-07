@@ -3,7 +3,7 @@ import os
 import sys
 import pytest
 
-from gui import IPAToolbarWidget, TagSelectorWidget
+from ui.widgets import IPAToolbarWidget, TagSelectorWidget
 
 
 class TestIPAToolbarWidget:
